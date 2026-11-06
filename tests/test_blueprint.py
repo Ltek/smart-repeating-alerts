@@ -1,7 +1,7 @@
-"""Smart Alerts loads as a Home Assistant blueprint, and filled-in automations pass Home Assistant's validation.
+"""Smart Repeating Alerts loads as a Home Assistant blueprint, and filled-in automations pass Home Assistant's validation.
 
     pytest tests                                 # the blueprint and sample automations
-    SMART_ALERTS_CONVERTED=<dir> pytest tests    # also every converted automation in <dir> (kept outside the repo)
+    SMART_REPEATING_ALERTS_CONVERTED=<dir> pytest tests    # also every converted automation in <dir> (kept outside the repo)
 """
 
 import os
@@ -14,7 +14,7 @@ from homeassistant.components.blueprint.models import Blueprint, BlueprintInputs
 from homeassistant.components.automation.config import AUTOMATION_BLUEPRINT_SCHEMA, async_validate_config_item
 
 ROOT = Path(__file__).resolve().parent.parent
-BP = ROOT / "smart-alerts-ltek.yaml"
+BP = ROOT / "smart-repeating-alerts-ltek.yaml"
 
 
 def _blueprint() -> Blueprint:
@@ -23,7 +23,7 @@ def _blueprint() -> Blueprint:
 
 async def _validate(hass: Any, cfg: dict) -> dict:
     ub = cfg["use_blueprint"]
-    filled = BlueprintInputs(_blueprint(), {"use_blueprint": {"path": "LTek/smart-alerts-ltek.yaml", "input": ub.get("input") or {}}})
+    filled = BlueprintInputs(_blueprint(), {"use_blueprint": {"path": "LTek/smart-repeating-alerts-ltek.yaml", "input": ub.get("input") or {}}})
     filled.validate()
     sub = filled.async_substitute()
     res = await async_validate_config_item(hass, cfg.get("id", "t"), {"id": cfg.get("id", "t"), "alias": cfg.get("alias", "t"), **sub})
@@ -55,10 +55,10 @@ async def test_camera_and_extras(hass: Any) -> None:
     assert "camera.snapshot" in text and "service:" not in text and "platform:" not in text
 
 
-CONVERTED = os.environ.get("SMART_ALERTS_CONVERTED")
+CONVERTED = os.environ.get("SMART_REPEATING_ALERTS_CONVERTED")
 
 
-@pytest.mark.skipif(not CONVERTED, reason="set SMART_ALERTS_CONVERTED to check converted automations")
+@pytest.mark.skipif(not CONVERTED, reason="set SMART_REPEATING_ALERTS_CONVERTED to check converted automations")
 async def test_converted(hass: Any) -> None:
     """Every input fills the blueprint; full validation where this test's Home Assistant knows every type used.
 

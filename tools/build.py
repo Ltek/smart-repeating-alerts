@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Build smart-alerts-ltek.yaml from Repeating Alerts (_base-repeating-alerts.yaml) plus the Smart Alerts additions.
+"""Build smart-repeating-alerts-ltek.yaml from Repeating Alerts (_base-repeating-alerts.yaml) plus the Smart Repeating Alerts additions.
 
 Repeating Alerts' code paths are kept as they are (they carry many field fixes); the additions are applied as
 checked text edits, so every edit fails loudly if the base changes under it.
 
-    python3 tools/build.py            # writes smart-alerts-ltek.yaml
+    python3 tools/build.py            # writes smart-repeating-alerts-ltek.yaml
 """
 
 import re
@@ -13,7 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 BASE = ROOT / "_base-repeating-alerts.yaml"
-OUT = ROOT / "smart-alerts-ltek.yaml"
+OUT = ROOT / "smart-repeating-alerts-ltek.yaml"
 VERSION = (ROOT / "VERSION").read_text().strip()
 
 
@@ -30,18 +30,18 @@ s = BASE.read_text()
 head_end = s.index("    Author: LTek")
 s = (
     f"""blueprint:
-  name: ⚠️ Smart Alerts by LTek
+  name: ⚠️ Smart Repeating Alerts (Ltek)
   description: |
 
     **Repeating, actionable alerts for doors, windows, leaks, cameras and more**
 
     🚀 Version {VERSION}
 
-    Smart Alerts is Repeating Alert Notifications (2026.07.30.39) plus camera snapshots, more delivery options and a
+    Smart Repeating Alerts is Repeating Alert Notifications (2026.07.30.39) plus camera snapshots, more delivery options and a
     test mode. Every Repeating Alerts input keeps its name, so an existing Repeating Alerts automation switches by
     changing only its blueprint path.
 
-    New in Smart Alerts:
+    New in Smart Repeating Alerts:
     - 📸 Camera snapshot attached to every notification (snapshot delay, file path, optional archive copy)
     - 🔗 Buttons can open a URL or a dashboard (URI) instead of running an action
     - 📮 Extra notify services (e.g. notify.family) next to the mobile devices, and an Android notification group
@@ -56,9 +56,9 @@ s = (
 s = must(
     s,
     "  source_url: https://gist.github.com/Ltek/0d88ed720f635a7579849aac93b9ff93",
-    "  source_url: https://github.com/Ltek/smart-alerts/blob/main/smart-alerts-ltek.yaml",
+    "  source_url: https://github.com/Ltek/smart-repeating-alerts/blob/main/smart-repeating-alerts-ltek.yaml",
 )
-s = re.sub(r"Repeating Alert - ([A-Z])", r"Smart Alert - \1", s)  # debug notification titles
+s = re.sub(r"Repeating Alert - ([A-Z])", r"Smart Repeating Alert - \1", s)  # debug notification titles
 
 # ── new inputs ───────────────────────────────────────────────────────────────────────────────────────────────────────
 s = must(
@@ -259,7 +259,7 @@ TRIGGER_CHECK = """  - condition: template
           trigger.idx | int(-1) < (alert_trigger_count + clear_trigger_count + resolution_trigger_count)) }}
 """
 SNAP = TRIGGER_CHECK + """
-  # ── Smart Alerts: cooldown, then the camera snapshot ─────────────────────────
+  # ── Smart Repeating Alerts: cooldown, then the camera snapshot ─────────────────────────
   - variables:
       is_alert_trigger: "{{ trigger.idx is defined and trigger.idx | int(-1) < alert_trigger_count }}"
       snapshot_create_file_path: !input snapshot_file_path

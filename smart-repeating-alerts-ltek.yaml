@@ -1,16 +1,16 @@
 blueprint:
-  name: ⚠️ Smart Alerts by LTek
+  name: ⚠️ Smart Repeating Alerts (Ltek)
   description: |
 
     **Repeating, actionable alerts for doors, windows, leaks, cameras and more**
 
-    🚀 Version 2026.11.06.1
+    🚀 Version 2026.11.06.2
 
-    Smart Alerts is Repeating Alert Notifications (2026.07.30.39) plus camera snapshots, more delivery options and a
+    Smart Repeating Alerts is Repeating Alert Notifications (2026.07.30.39) plus camera snapshots, more delivery options and a
     test mode. Every Repeating Alerts input keeps its name, so an existing Repeating Alerts automation switches by
     changing only its blueprint path.
 
-    New in Smart Alerts:
+    New in Smart Repeating Alerts:
     - 📸 Camera snapshot attached to every notification (snapshot delay, file path, optional archive copy)
     - 🔗 Buttons can open a URL or a dashboard (URI) instead of running an action
     - 📮 Extra notify services (e.g. notify.family) next to the mobile devices, and an Android notification group
@@ -73,7 +73,7 @@ blueprint:
     Auto Actions are distinct from Custom Actions — Custom Actions fire on every notification,
     Auto Actions fire only once after all repeats are exhausted with no button ever pressed.
 
-  source_url: https://github.com/Ltek/smart-alerts/blob/main/smart-alerts-ltek.yaml
+  source_url: https://github.com/Ltek/smart-repeating-alerts/blob/main/smart-repeating-alerts-ltek.yaml
   domain: automation
   input:
 
@@ -1206,7 +1206,7 @@ actions:
     then:
       - action: persistent_notification.create
         data:
-          title: "🚨 Smart Alert - Alert Automation Triggered"
+          title: "🚨 Smart Repeating Alert - Alert Automation Triggered"
           message: |
             Automation has been triggered at {{ now().strftime('%I:%M:%S %p') }}
 
@@ -1227,7 +1227,7 @@ actions:
          (trigger.idx is defined and
           trigger.idx | int(-1) < (alert_trigger_count + clear_trigger_count + resolution_trigger_count)) }}
 
-  # ── Smart Alerts: cooldown, then the camera snapshot ─────────────────────────
+  # ── Smart Repeating Alerts: cooldown, then the camera snapshot ─────────────────────────
   - variables:
       is_alert_trigger: "{{ trigger.idx is defined and trigger.idx | int(-1) < alert_trigger_count }}"
       snapshot_create_file_path: !input snapshot_file_path
@@ -1274,7 +1274,7 @@ actions:
             then:
               - action: persistent_notification.create
                 data:
-                  title: "🔄 Smart Alert - HA Restart Detected"
+                  title: "🔄 Smart Repeating Alert - HA Restart Detected"
                   message: "Checking if alert was in progress..."
           - condition: template
             value_template: >
@@ -1353,7 +1353,7 @@ actions:
             then:
               - action: persistent_notification.create
                 data:
-                  title: "✅ Smart Alert - Alert Restored After Restart"
+                  title: "✅ Smart Repeating Alert - Alert Restored After Restart"
                   message: "Continuing with repeat {{ repeat_count }}"
           - wait_for_trigger:
               - trigger: state
@@ -1386,7 +1386,7 @@ actions:
             then:
               - action: persistent_notification.create
                 data:
-                  title: "🛑 Smart Alert - Alert Cleared"
+                  title: "🛑 Smart Repeating Alert - Alert Cleared"
                   message: "Clear trigger fired. Removing notification {{ notification_tag }}"
           - if:
               - condition: template
@@ -1432,7 +1432,7 @@ actions:
             then:
               - action: persistent_notification.create
                 data:
-                  title: "✅ Smart Alert - Alert Resolved"
+                  title: "✅ Smart Repeating Alert - Alert Resolved"
                   message: >
                     Resolution trigger fired.
                     {% if enable_resolution_notification %}
@@ -1527,7 +1527,7 @@ actions:
                 then:
                   - action: persistent_notification.create
                     data:
-                      title: "📱 Smart Alert - Sending Resolution Notification"
+                      title: "📱 Smart Repeating Alert - Sending Resolution Notification"
                       message: |
                         **Notification Details:**
                         - Title: {{ webui_res_title }}
@@ -1669,7 +1669,7 @@ actions:
           then:
             - action: persistent_notification.create
               data:
-                title: "⏱️ Smart Alert - Initial Delay Active"
+                title: "⏱️ Smart Repeating Alert - Initial Delay Active"
                 message: "Waiting {{ duration_issue_state }} before first notification"
         - delay: !input duration_issue_state
 
@@ -1720,7 +1720,7 @@ actions:
       then:
         - action: persistent_notification.create
           data:
-            title: "📱 Smart Alert - Sending First Notification"
+            title: "📱 Smart Repeating Alert - Sending First Notification"
             message: |
               **Notification Details:**
               - Title: {{ webui_mirror_title }}
@@ -1847,7 +1847,7 @@ actions:
                   then:
                     - action: persistent_notification.create
                       data:
-                        title: "👆 Smart Alert - Button 1 Pressed"
+                        title: "👆 Smart Repeating Alert - Button 1 Pressed"
                         message: "{{ action_button_1_label }} - stopping automation"
                 - sequence: !input action_button_1_action
                 - stop: "Button 1 pressed"
@@ -1861,7 +1861,7 @@ actions:
                   then:
                     - action: persistent_notification.create
                       data:
-                        title: "👆 Smart Alert - Button 2 Pressed"
+                        title: "👆 Smart Repeating Alert - Button 2 Pressed"
                         message: "{{ action_button_2_label }} - stopping automation"
                 - sequence: !input action_button_2_action
                 - stop: "Button 2 pressed"
@@ -1875,7 +1875,7 @@ actions:
                   then:
                     - action: persistent_notification.create
                       data:
-                        title: "👆 Smart Alert - Button 3 Pressed"
+                        title: "👆 Smart Repeating Alert - Button 3 Pressed"
                         message: "{{ action_button_3_label }} - stopping automation"
                 - sequence: !input action_button_3_action
                 - stop: "Button 3 pressed"
@@ -1889,7 +1889,7 @@ actions:
                   then:
                     - action: persistent_notification.create
                       data:
-                        title: "❌ Smart Alert - Alert Cancelled"
+                        title: "❌ Smart Repeating Alert - Alert Cancelled"
                         message: "User pressed {{ action_button_stop_label }}"
                 - if:
                     - condition: template
@@ -1944,7 +1944,7 @@ actions:
           then:
             - action: persistent_notification.create
               data:
-                title: "⏰ Smart Alert - Button Timeout"
+                title: "⏰ Smart Repeating Alert - Button Timeout"
                 message: "No button pressed - continuing to next repeat"
 
     # ── REPEAT LOOP ───────────────────────────────────────────────────────────
@@ -1958,7 +1958,7 @@ actions:
           then:
             - action: persistent_notification.create
               data:
-                title: "🔄 Smart Alert - Starting Repeat Loop"
+                title: "🔄 Smart Repeating Alert - Starting Repeat Loop"
                 message: "Current repeat: {{ repeat_count + 1 }}/{{ max_repeat_count if max_repeat_count > 0 else '∞' }}"
         - variables:
             repeat_count: '{{ repeat_count + 1 }}'
@@ -2213,7 +2213,7 @@ actions:
           then:
             - action: persistent_notification.create
               data:
-                title: "🤖 Smart Alert - Auto-Actions Triggered"
+                title: "🤖 Smart Repeating Alert - Auto-Actions Triggered"
                 message: "All repeats exhausted with no response. Running failsafe actions."
         - if:
             - condition: template
@@ -2253,7 +2253,7 @@ actions:
           then:
             - action: persistent_notification.create
               data:
-                title: "📱 Smart Alert - Sending Final Notification"
+                title: "📱 Smart Repeating Alert - Sending Final Notification"
                 message: "All repeats complete. Final notification sent."
         - if:
             - condition: template
@@ -2403,7 +2403,7 @@ actions:
           then:
             - action: persistent_notification.create
               data:
-                title: "⏱️ Smart Alert - Auto-Clear Delay"
+                title: "⏱️ Smart Repeating Alert - Auto-Clear Delay"
                 message: "Waiting {{ auto_clear_delay }} before clearing notification"
         - delay: !input auto_clear_delay
         - if:
@@ -2437,7 +2437,7 @@ actions:
           then:
             - action: persistent_notification.create
               data:
-                title: "✅ Smart Alert - Alert Complete"
+                title: "✅ Smart Repeating Alert - Alert Complete"
                 message: "Notification {{ notification_tag }} cleared on all devices"
         - choose: []
           default: !input custom_action_on_clear

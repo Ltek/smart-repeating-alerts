@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Convert Repeating Alerts and Smart Camera Notifications automations to Smart Alerts, one YAML file each.
+"""Convert Repeating Alerts and Smart Camera Notifications automations to Smart Repeating Alerts, one YAML file each.
 
     python3 tools/convert.py <automations.yaml> <output dir>
 
-Each file is one automation (same id and alias) using LTek/smart-alerts-ltek.yaml, with a comment block listing what
+Each file is one automation (same id and alias) using LTek/smart-repeating-alerts-ltek.yaml, with a comment block listing what
 was mapped. Paste it over the old automation in automations.yaml (or into the automation's YAML editor).
 Nothing is written next to automations.yaml.
 """
@@ -15,7 +15,7 @@ from pathlib import Path
 
 import yaml
 
-NEW_PATH = "LTek/smart-alerts-ltek.yaml"
+NEW_PATH = "LTek/smart-repeating-alerts-ltek.yaml"
 RA_PATH = "LTek/repeating-alerts-ltek.yaml"
 CAM_PATH = "LTek/smart-camera-notifications-ltek.yaml"
 ROOT = Path(__file__).resolve().parent.parent
@@ -49,7 +49,7 @@ Dumper.add_representer(Tagged, _str)
 
 
 def blueprint_inputs() -> set[str]:
-    bp = yaml.load((ROOT / "smart-alerts-ltek.yaml").read_text(), Loader=Loader)["blueprint"]
+    bp = yaml.load((ROOT / "smart-repeating-alerts-ltek.yaml").read_text(), Loader=Loader)["blueprint"]
 
     def walk(d):
         for k, v in (d or {}).items():
@@ -75,7 +75,7 @@ def convert_ra(inp: dict, notes: list[str]) -> dict:
             notes.append(f"{old} (no longer in Repeating Alerts) → {new}")
     for k in ("android_alarm_stream", "android_vibration_pattern", "android_led_color"):
         if k in out:
-            notes.append(f"{k}: did nothing in Repeating Alerts; Smart Alerts uses it")
+            notes.append(f"{k}: did nothing in Repeating Alerts; Smart Repeating Alerts uses it")
     return out
 
 
@@ -169,16 +169,16 @@ def main() -> None:
         unknown = sorted(set(new_inp) - known)
         for k in unknown:
             new_inp.pop(k)
-            notes.append(f"dropped {k}: not an input of Smart Alerts (it did nothing before either)")
+            notes.append(f"dropped {k}: not an input of Smart Repeating Alerts (it did nothing before either)")
         auto = {k: v for k, v in a.items() if k != "use_blueprint"}
         auto["use_blueprint"] = {"path": NEW_PATH, "input": new_inp}
         slug = re.sub(r"[^a-z0-9]+", "-", str(a.get("alias", a.get("id"))).lower()).strip("-")
-        head = [f"# {a.get('alias')}  (id {a.get('id')})", f"# was: {path}", "# converted to Smart Alerts by tools/convert.py"]
+        head = [f"# {a.get('alias')}  (id {a.get('id')})", f"# was: {path}", "# converted to Smart Repeating Alerts by tools/convert.py"]
         head += [f"#   - {n}" for n in notes] or ["#   - no changes beyond the blueprint path"]
         body = yaml.dump([auto], Dumper=Dumper, sort_keys=False, allow_unicode=True, width=120)
         (dst / f"{slug}.yaml").write_text("\n".join(head) + "\n" + body)
         index.append((slug, a.get("alias"), path.split("/")[-1], len(notes)))
-    lines = ["# Smart Alerts conversions", "", "| File | Automation | Was | Notes |", "|---|---|---|---|"]
+    lines = ["# Smart Repeating Alerts conversions", "", "| File | Automation | Was | Notes |", "|---|---|---|---|"]
     lines += [f"| {s}.yaml | {al} | {p} | {n} |" for s, al, p, n in index]
     (dst / "INDEX.md").write_text("\n".join(lines) + "\n")
     print(f"{len(index)} automations converted into {dst}")

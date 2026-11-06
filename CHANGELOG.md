@@ -1,5 +1,10 @@
 # Changelog
 
+## v2026.11.06.2 — 2026-11-06
+
+- Renamed to **Smart Repeating Alerts (Ltek)**: file `smart-repeating-alerts-ltek.yaml`, repo
+  `Ltek/smart-repeating-alerts`. No other changes.
+
 ## v2026.11.06.1 — 2026-11-06
 
 First version: Repeating Alert Notifications 2026.07.30.39 plus

@@ -1,4 +1,4 @@
-# ⚠️ Smart Alerts by LTek
+# ⚠️ Smart Repeating Alerts (Ltek)
 
 A Home Assistant **automation blueprint** for repeating, actionable alerts: doors, windows, leaks, smoke and CO,
 temperatures, cameras and anything else with a trigger.
@@ -6,9 +6,9 @@ temperatures, cameras and anything else with a trigger.
 It is [Repeating Alert Notifications](https://community.home-assistant.io/t/repeating-alert-notifications/888294)
 with the camera snapshots of Smart Camera Notifications and more delivery options. Every Repeating Alerts input keeps
 its name, so an existing Repeating Alerts automation switches by changing only its blueprint path to
-`LTek/smart-alerts-ltek.yaml`.
+`LTek/smart-repeating-alerts-ltek.yaml`.
 
-[![Import the blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FLtek%2Fsmart-alerts%2Fblob%2Fmain%2Fsmart-alerts-ltek.yaml)
+[![Import the blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FLtek%2Fsmart-repeating-alerts%2Fblob%2Fmain%2Fsmart-repeating-alerts-ltek.yaml)
 
 ## What it does
 
@@ -31,11 +31,11 @@ its name, so an existing Repeating Alerts automation switches by changing only i
 
 ## Building
 
-`smart-alerts-ltek.yaml` is generated: `python3 tools/build.py` applies the Smart Alerts additions to
+`smart-repeating-alerts-ltek.yaml` is generated: `python3 tools/build.py` applies the Smart Repeating Alerts additions to
 `_base-repeating-alerts.yaml` (Repeating Alerts 2026.07.30.39). Tests: `pytest tests` with
 `pytest-homeassistant-custom-component` installed.
 
 `tools/convert.py <automations.yaml> <dir>` converts Repeating Alerts and Smart Camera Notifications automations to
-Smart Alerts, one file each, and lists what it mapped.
+Smart Repeating Alerts, one file each, and lists what it mapped.
 
 See [CHANGELOG.md](CHANGELOG.md).
