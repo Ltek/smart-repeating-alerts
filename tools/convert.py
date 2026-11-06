@@ -61,8 +61,28 @@ def blueprint_inputs() -> set[str]:
     return set(walk(bp["input"]))
 
 
+def _multi(triggers) -> bool:
+    """True when the alert triggers cover a label, an area, a device or several different entities."""
+    seen: set[str] = set()
+    for t in triggers or []:
+        if not isinstance(t, dict) or t.get("enabled") is False:
+            continue
+        tgt = t.get("target") or {}
+        if any(tgt.get(k) for k in ("label_id", "area_id", "device_id", "floor_id")):
+            return True
+        ents = t.get("entity_id") or tgt.get("entity_id") or []
+        seen.update(ents if isinstance(ents, list) else [ents])
+    return len(seen) > 1
+
+
 def convert_ra(inp: dict, notes: list[str]) -> dict:
     out = dict(inp)
+    if _multi(out.get("alert_trigger")):
+        out["run_mode"] = "parallel"
+        notes.append("run_mode: one alert per triggering entity (the trigger covers a label or several entities; "
+                     "before, a second entity replaced the first one's alert)")
+        if out.get("include_persistence"):
+            notes.append("restart persistence is off with one alert per entity (its helpers hold one alert)")
     if out.pop("android_priority", None) is not None:
         out["android_priority"] = "high"
         notes.append("android_priority: was 'urgent' (did nothing in Repeating Alerts) → high")

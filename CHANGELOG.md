@@ -1,5 +1,13 @@
 # Changelog
 
+## v2026.11.06.3 — 2026-11-06
+
+- **Alerts per Entity** (Alert Trigger section). *One alert per triggering entity* gives each entity its own alert,
+  buttons and repeats when the trigger covers a label or several entities: the tag is the Notification ID plus the
+  entity, and a clear, a resolution or a new trigger for one entity stops only that entity's alert. Before, a
+  second window opening (or any window closing) replaced or cleared the first window's alert. Restart Persistence is
+  off in this mode. *One alert at a time* (the default) is unchanged.
+
 ## v2026.11.06.2 — 2026-11-06
 
 - Renamed to **Smart Repeating Alerts (Ltek)**: file `smart-repeating-alerts-ltek.yaml`, repo

@@ -4,7 +4,7 @@ blueprint:
 
     **Repeating, actionable alerts for doors, windows, leaks, cameras and more**
 
-    🚀 Version 2026.11.06.2
+    🚀 Version 2026.11.06.3
 
     Smart Repeating Alerts is Repeating Alert Notifications (2026.07.30.39) plus camera snapshots, more delivery options and a
     test mode. Every Repeating Alerts input keeps its name, so an existing Repeating Alerts automation switches by
@@ -91,6 +91,22 @@ blueprint:
           default: []
           selector:
             trigger: {}
+
+        run_mode:
+          name: "Alerts per Entity"
+          description: >
+            With a label or several entities, choose "One alert per triggering entity": each entity gets its own
+            alert, buttons and repeats, and closing one entity clears only its alert (tag = Notification ID + the
+            entity). "One alert at a time" is the Repeating Alerts behavior: a new trigger or any clear replaces the
+            current alert. Restart Persistence works only with one alert at a time.
+          default: restart
+          selector:
+            select:
+              options:
+                - label: One alert at a time
+                  value: restart
+                - label: One alert per triggering entity
+                  value: parallel
 
         duration_issue_state:
           name: "Time Delay before Alert is Sent"
@@ -1049,7 +1065,8 @@ blueprint:
           selector:
             text: {}
 
-mode: restart
+mode: !input run_mode
+max: 50
 max_exceeded: silent
 
 trigger_variables:
@@ -1116,6 +1133,8 @@ variables:
   resolution_button_2_label: !input resolution_button_2_label
   resolution_button_3_label: !input resolution_button_3_label
   repeat_count: 0
+  run_mode: !input run_mode
+  per_entity: "{{ run_mode == 'parallel' }}"
   camera: !input camera
   camera_object_id: "{{ camera.split('.', 1)[1] if camera else '' }}"
   camera_name: "{{ state_attr(camera, 'friendly_name') if camera else '' }}"
@@ -1163,7 +1182,6 @@ actions:
         {% endif %}
         {{ ns.services | unique | list }}
       number_of_notify_services: '{{ notify_services_list | count }}'
-      notification_tag: '{{ notification_id_template }}'
       trigger_fired_at: >
         {% if trigger.to_state is defined and trigger.to_state is not none %}
           {{ trigger.to_state.last_changed | as_timestamp }}
@@ -1197,7 +1215,12 @@ actions:
         {% else %}
         {% endif %}
       persist_entity_id: '{{ trigger.get("entity_id", "") }}'
-      webui_notification_id: '{{ "webui_" ~ (notification_id_template if notification_id_template != "" else context.id) }}'
+      alert_key: "{{ trigger.get('entity_id', '') | string }}"
+      notification_tag: >-
+        {{ notification_id_template ~ ('-' ~ (trigger.get('entity_id', '') | string).split('.')[-1]
+           if per_entity and trigger.get('entity_id') and notification_id_template != '' else '') }}
+      include_persistence: "{{ include_persistence and not per_entity }}"
+      webui_notification_id: '{{ "webui_" ~ (notification_tag if notification_tag != "" else context.id) }}'
 
   # ── DEBUG: automation triggered ─────────────────────────────────────────────
   - if:
@@ -1382,6 +1405,14 @@ actions:
         sequence:
           - if:
               - condition: template
+                value_template: "{{ per_entity and alert_key != '' }}"
+            then:
+              - event: smart_repeating_alerts_stop
+                event_data:
+                  automation: "{{ this.entity_id }}"
+                  entity: "{{ alert_key }}"
+          - if:
+              - condition: template
                 value_template: '{{ enable_webui_debug_notifications }}'
             then:
               - action: persistent_notification.create
@@ -1424,6 +1455,14 @@ actions:
                  trigger.idx | int(-1) >= (alert_trigger_count + clear_trigger_count) and
                  trigger.idx | int(-1) < (alert_trigger_count + clear_trigger_count + resolution_trigger_count) }}
         sequence:
+          - if:
+              - condition: template
+                value_template: "{{ per_entity and alert_key != '' }}"
+            then:
+              - event: smart_repeating_alerts_stop
+                event_data:
+                  automation: "{{ this.entity_id }}"
+                  entity: "{{ alert_key }}"
 
           # ── DEBUG: resolution trigger fired ──────────────────────────────────
           - if:
@@ -1627,6 +1666,14 @@ actions:
 
     # ── ALERT TRIGGER FIRED ───────────────────────────────────────────────────
     default:
+    - if:
+        - condition: template
+          value_template: "{{ per_entity and alert_key != '' }}"
+      then:
+        - event: smart_repeating_alerts_stop
+          event_data:
+            automation: "{{ this.entity_id }}"
+            entity: "{{ alert_key }}"
 
     # ── OPTIONAL CONDITIONS ───────────────────────────────────────────────────
     - condition: !input condition_send_notification
@@ -1671,7 +1718,19 @@ actions:
               data:
                 title: "⏱️ Smart Repeating Alert - Initial Delay Active"
                 message: "Waiting {{ duration_issue_state }} before first notification"
-        - delay: !input duration_issue_state
+        - wait_for_trigger:
+            - trigger: event
+              event_type: smart_repeating_alerts_stop
+              event_data:
+                automation: "{{ this.entity_id }}"
+                entity: "{{ alert_key }}"
+          timeout: !input duration_issue_state
+          continue_on_timeout: true
+        - if:
+            - condition: template
+              value_template: "{{ wait.trigger is not none and wait.trigger.event is defined and wait.trigger.event.event_type == 'smart_repeating_alerts_stop' }}"
+          then:
+            - stop: "Cleared or replaced by a newer alert for this entity"
 
     # ── CUSTOM ACTION: ON FIRST TRIGGER ───────────────────────────────────────
     - choose: []
@@ -1797,6 +1856,11 @@ actions:
           then:
             - wait_for_trigger:
                 - trigger: event
+                  event_type: smart_repeating_alerts_stop
+                  event_data:
+                    automation: "{{ this.entity_id }}"
+                    entity: "{{ alert_key }}"
+                - trigger: event
                   event_type: mobile_app_notification_action
                   event_data:
                     action: '{{ action_btn_1 }}'
@@ -1814,8 +1878,18 @@ actions:
                     action: '{{ action_btn_stop }}'
               timeout: !input time_between_repeat_notification
               continue_on_timeout: true
+            - if:
+                - condition: template
+                  value_template: "{{ wait.trigger is not none and wait.trigger.event is defined and wait.trigger.event.event_type == 'smart_repeating_alerts_stop' }}"
+              then:
+                - stop: "Cleared or replaced by a newer alert for this entity"
           else:
             - wait_for_trigger:
+                - trigger: event
+                  event_type: smart_repeating_alerts_stop
+                  event_data:
+                    automation: "{{ this.entity_id }}"
+                    entity: "{{ alert_key }}"
                 - trigger: event
                   event_type: mobile_app_notification_action
                   event_data:
@@ -1835,6 +1909,11 @@ actions:
               timeout: !input action_button_timeout
               continue_on_timeout: true
 
+            - if:
+                - condition: template
+                  value_template: "{{ wait.trigger is not none and wait.trigger.event is defined and wait.trigger.event.event_type == 'smart_repeating_alerts_stop' }}"
+              then:
+                - stop: "Cleared or replaced by a newer alert for this entity"
         # ── BUTTON PRESSED → fire action and stop ─────────────────────────────
         - choose:
             - conditions:
@@ -1978,7 +2057,19 @@ actions:
             - condition: template
               value_template: '{{ actions_list | length == 0 }}'
           then:
-            - delay: !input time_between_repeat_notification
+            - wait_for_trigger:
+                - trigger: event
+                  event_type: smart_repeating_alerts_stop
+                  event_data:
+                    automation: "{{ this.entity_id }}"
+                    entity: "{{ alert_key }}"
+              timeout: !input time_between_repeat_notification
+              continue_on_timeout: true
+            - if:
+                - condition: template
+                  value_template: "{{ wait.trigger is not none and wait.trigger.event is defined and wait.trigger.event.event_type == 'smart_repeating_alerts_stop' }}"
+              then:
+                - stop: "Cleared or replaced by a newer alert for this entity"
         - repeat:
             while:
               - condition: template
@@ -2060,6 +2151,11 @@ actions:
                 then:
                   - wait_for_trigger:
                       - trigger: event
+                        event_type: smart_repeating_alerts_stop
+                        event_data:
+                          automation: "{{ this.entity_id }}"
+                          entity: "{{ alert_key }}"
+                      - trigger: event
                         event_type: mobile_app_notification_action
                         event_data:
                           action: '{{ action_btn_1 }}'
@@ -2078,6 +2174,11 @@ actions:
                     timeout: !input time_between_repeat_notification
                     continue_on_timeout: true
 
+                  - if:
+                      - condition: template
+                        value_template: "{{ wait.trigger is not none and wait.trigger.event is defined and wait.trigger.event.event_type == 'smart_repeating_alerts_stop' }}"
+                    then:
+                      - stop: "Cleared or replaced by a newer alert for this entity"
                   # ── BUTTON PRESSED → fire action and stop repeats ──────────
                   - choose:
                       - conditions:
@@ -2200,7 +2301,19 @@ actions:
                   - condition: template
                     value_template: '{{ actions_list | length == 0 }}'
                 then:
-                  - delay: !input time_between_repeat_notification
+                  - wait_for_trigger:
+                      - trigger: event
+                        event_type: smart_repeating_alerts_stop
+                        event_data:
+                          automation: "{{ this.entity_id }}"
+                          entity: "{{ alert_key }}"
+                    timeout: !input time_between_repeat_notification
+                    continue_on_timeout: true
+                  - if:
+                      - condition: template
+                        value_template: "{{ wait.trigger is not none and wait.trigger.event is defined and wait.trigger.event.event_type == 'smart_repeating_alerts_stop' }}"
+                    then:
+                      - stop: "Cleared or replaced by a newer alert for this entity"
 
     # ── AUTO-ACTIONS (failsafe — fires only if all repeats exhausted unanswered)
     - if:
@@ -2308,6 +2421,11 @@ actions:
               default: !input custom_action_final_notification
         - wait_for_trigger:
             - trigger: event
+              event_type: smart_repeating_alerts_stop
+              event_data:
+                automation: "{{ this.entity_id }}"
+                entity: "{{ alert_key }}"
+            - trigger: event
               event_type: mobile_app_notification_action
               event_data:
                 action: '{{ action_btn_1 }}'
@@ -2325,6 +2443,11 @@ actions:
                 action: '{{ action_btn_stop }}'
           timeout: !input action_button_timeout
           continue_on_timeout: true
+        - if:
+            - condition: template
+              value_template: "{{ wait.trigger is not none and wait.trigger.event is defined and wait.trigger.event.event_type == 'smart_repeating_alerts_stop' }}"
+          then:
+            - stop: "Cleared or replaced by a newer alert for this entity"
         - choose:
             - conditions:
                 - condition: template

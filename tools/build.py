@@ -334,6 +334,141 @@ s = must(s, "  action_button_3_label: !input action_button_3_label\n",
          "  action_button_2_uri: !input action_button_2_uri\n"
          "  action_button_3_uri: !input action_button_3_uri\n")
 
+
+# ── One alert per entity (parallel runs) ──────────────────────────────────────────────────────────────────────────────
+# Restart mode keeps one alert per automation: with a label or several entities, a second entity's trigger (or any
+# clear) cancels the first entity's alert. "One alert per triggering entity" runs each entity in its own run: a tag per
+# entity, a clear / resolution / new trigger for an entity stops only that entity's run (a stop event the run listens
+# for in every wait), and restart persistence is off (its helpers hold one alert).
+s = must(s, "mode: restart\nmax_exceeded: silent\n", "mode: !input run_mode\nmax: 50\nmax_exceeded: silent\n")
+s = must(
+    s,
+    "        duration_issue_state:\n          name: \"Time Delay before Alert is Sent\"",
+    """        run_mode:
+          name: "Alerts per Entity"
+          description: >
+            With a label or several entities, choose "One alert per triggering entity": each entity gets its own
+            alert, buttons and repeats, and closing one entity clears only its alert (tag = Notification ID + the
+            entity). "One alert at a time" is the Repeating Alerts behavior: a new trigger or any clear replaces the
+            current alert. Restart Persistence works only with one alert at a time.
+          default: restart
+          selector:
+            select:
+              options:
+                - label: One alert at a time
+                  value: restart
+                - label: One alert per triggering entity
+                  value: parallel
+
+        duration_issue_state:
+          name: "Time Delay before Alert is Sent\"""",
+)
+s = must(
+    s,
+    "  repeat_count: 0\n  camera: !input camera\n",
+    """  repeat_count: 0
+  run_mode: !input run_mode
+  per_entity: "{{ run_mode == 'parallel' }}"
+  camera: !input camera
+""",
+)
+# the triggering entity, the per-entity tag and bell id, and persistence off per entity
+s = must(
+    s,
+    "      persist_entity_id: '{{ trigger.get(\"entity_id\", \"\") }}'\n",
+    """      persist_entity_id: '{{ trigger.get("entity_id", "") }}'
+      alert_key: "{{ trigger.get('entity_id', '') | string }}"
+      notification_tag: >-
+        {{ notification_id_template ~ ('-' ~ (trigger.get('entity_id', '') | string).split('.')[-1]
+           if per_entity and trigger.get('entity_id') and notification_id_template != '' else '') }}
+      include_persistence: "{{ include_persistence and not per_entity }}"
+""",
+)
+s = must(
+    s,
+    "      webui_notification_id: '{{ \"webui_\" ~ (notification_id_template if notification_id_template != \"\" else context.id) }}'",
+    "      webui_notification_id: '{{ \"webui_\" ~ (notification_tag if notification_tag != \"\" else context.id) }}'",
+)
+# the first notification_tag line (main path) is now set after the trigger entity is known: drop the early one
+s = must(s, "      number_of_notify_services: '{{ notify_services_list | count }}'\n      notification_tag: '{{ notification_id_template }}'\n      trigger_fired_at:",
+         "      number_of_notify_services: '{{ notify_services_list | count }}'\n      trigger_fired_at:")
+
+STOP_EVENT = "smart_repeating_alerts_stop"
+FIRE = f"""- if:
+    - condition: template
+      value_template: "{{{{ per_entity and alert_key != '' }}}}"
+  then:
+    - event: {STOP_EVENT}
+      event_data:
+        automation: "{{{{ this.entity_id }}}}"
+        entity: "{{{{ alert_key }}}}"
+"""
+
+
+def block(text: str, ind: str) -> str:
+    return "".join(ind + ln + "\n" if ln else "\n" for ln in text.rstrip("\n").split("\n"))
+
+
+# a clear or resolution for an entity stops that entity's alert run
+for marker in ("      # ── CLEAR TRIGGER FIRED", "      # ── RESOLUTION TRIGGER FIRED"):
+    i = s.index(marker)
+    j = s.index("        sequence:\n", i) + len("        sequence:\n")
+    s = s[:j] + block(FIRE, "          ") + s[j:]
+# a new trigger for the same entity replaces its running alert
+alert_at = s.index("    # ── ALERT TRIGGER FIRED")
+j = s.index("    default:\n", alert_at) + len("    default:\n")
+s = s[:j] + block(FIRE, "    ") + s[j:]
+
+LISTEN = f"""- trigger: event
+  event_type: {STOP_EVENT}
+  event_data:
+    automation: "{{{{ this.entity_id }}}}"
+    entity: "{{{{ alert_key }}}}"
+"""
+CHECK = """- if:
+    - condition: template
+      value_template: "{{ wait.trigger is not none and wait.trigger.event is defined and wait.trigger.event.event_type == 'smart_repeating_alerts_stop' }}"
+  then:
+    - stop: "Cleared or replaced by a newer alert for this entity"
+"""
+lines = s.split("\n")
+alert_line = next(n for n, ln in enumerate(lines) if ln.startswith("    # ── ALERT TRIGGER FIRED"))
+out: list[str] = []
+n = 0
+waits = delays = 0
+while n < len(lines):
+    ln = lines[n]
+    st = ln.lstrip()
+    ind = ln[: len(ln) - len(st)]
+    if n > alert_line and st == "- wait_for_trigger:":
+        # copy the block, add the stop listener as the first trigger, then the stop check after it
+        item_ind = ind + "    "
+        out.append(ln)
+        out += block(LISTEN, item_ind).rstrip("\n").split("\n")
+        n += 1
+        while n < len(lines) and (lines[n].strip() == "" or len(lines[n]) - len(lines[n].lstrip()) > len(ind)):
+            out.append(lines[n])
+            n += 1
+        out += block(CHECK, ind).rstrip("\n").split("\n")
+        waits += 1
+        continue
+    if n > alert_line and st in ("- delay: !input duration_issue_state", "- delay: !input time_between_repeat_notification"):
+        dur = st.split("!input ", 1)[1]
+        out += block(f"""- wait_for_trigger:
+{LISTEN.rstrip().replace(chr(10), chr(10) + '    ').join(['    ', ''])}
+  timeout: !input {dur}
+  continue_on_timeout: true
+""", ind).rstrip("\n").split("\n")
+        out += block(CHECK, ind).rstrip("\n").split("\n")
+        delays += 1
+        n += 1
+        continue
+    out.append(ln)
+    n += 1
+s = "\n".join(out)
+if (waits, delays) != (4, 3):
+    sys.exit(f"build: expected 4 button waits and 3 delays in the alert path, found {waits} and {delays}")
+
 # ── modern syntax ────────────────────────────────────────────────────────────────────────────────────────────────────
 s = re.sub(r"^(\s*-?\s*)service: ", r"\1action: ", s, flags=re.M)
 s = re.sub(r"^(\s*-?\s*)platform: ", r"\1trigger: ", s, flags=re.M)
