@@ -1,5 +1,15 @@
 # Changelog
 
+Build numbers continue from Repeating Alert Notifications (last build 2026.07.30.39). Builds .1 to .3 below were
+made locally before the numbering was settled and were never published; .42 is the first published build.
+
+## v2026.11.06.42 — 2026-11-06
+
+First published build of **Smart Repeating Alerts (Ltek)**, replacing Repeating Alert Notifications (Ltek) and Smart
+Camera Notifications. Everything in .1 to .3 below: camera snapshots, URI buttons, extra notify services and Android
+group, Android priority / vibration / LED / alarm stream, cooldown, test mode, `action:` syntax, and *Alerts per
+Entity* (one alert per triggering entity).
+
 ## v2026.11.06.3 — 2026-11-06
 
 - **Alerts per Entity** (Alert Trigger section). *One alert per triggering entity* gives each entity its own alert,
