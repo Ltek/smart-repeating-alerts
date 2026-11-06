@@ -33,7 +33,8 @@ Loader.add_multi_constructor("!", lambda loader, tag, node: Tagged(f"!{tag} {nod
 
 
 class Dumper(yaml.SafeDumper):
-    pass
+    def ignore_aliases(self, data):  # write every value out, no &id001 anchors
+        return True
 
 
 def _str(dumper, data):
@@ -83,6 +84,11 @@ def convert_ra(inp: dict, notes: list[str]) -> dict:
                      "before, a second entity replaced the first one's alert)")
         if out.get("include_persistence"):
             notes.append("restart persistence is off with one alert per entity (its helpers hold one alert)")
+        res = out.get("resolution_trigger") or []
+        if not out.get("clear_trigger") and res and all((t.get("options") or {}).get("behavior") == "all" for t in res):
+            out["clear_trigger"] = [{**t, "options": {**t["options"], "behavior": "each"}} for t in res]
+            notes.append("clear_trigger: the resolution trigger with behavior each, so each entity's alert stops when "
+                         "that entity clears (the resolution still waits for all of them)")
     if out.pop("android_priority", None) is not None:
         out["android_priority"] = "high"
         notes.append("android_priority: was 'urgent' (did nothing in Repeating Alerts) → high")
@@ -134,10 +140,12 @@ def convert_cam(inp: dict, notes: list[str]) -> dict:
     if g("include_action_buttons"):
         out["include_action_buttons"] = g("include_action_buttons")
     for n in (1, 2, 3):
-        label = g(f"action_button_{n}_title") or g(f"action_title_{n}")
-        uri = g(f"action_button_{n}_uri") or g(f"action_uri_{n}")
-        if not g(f"action_button_{n}_title") and g(f"action_title_{n}"):
-            notes.append(f"button {n}: old input action_title_{n} → action_button_{n}_label")
+        if g(f"action_button_{n}_title"):
+            label, uri = g(f"action_button_{n}_title"), g(f"action_button_{n}_uri")
+        else:  # the old inputs only when the newer ones are not set (otherwise they are leftovers, unused)
+            label, uri = g(f"action_title_{n}"), g(f"action_uri_{n}")
+            if label:
+                notes.append(f"button {n}: old input action_title_{n} → action_button_{n}_label")
         if label:
             out[f"action_button_{n}_label"] = label
         if uri:

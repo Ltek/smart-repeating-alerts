@@ -474,5 +474,13 @@ s = re.sub(r"^(\s*-?\s*)service: ", r"\1action: ", s, flags=re.M)
 s = re.sub(r"^(\s*-?\s*)platform: ", r"\1trigger: ", s, flags=re.M)
 s = must(s, "\naction:\n  - variables:\n", "\nactions:\n  - variables:\n")
 
+# camera variables first: android_channel, notification_group and titles may use camera_name
+CAM_VARS = [ln for ln in s.split("\n") if ln.startswith(("  camera: !input camera", "  camera_object_id:", "  camera_name:"))]
+if len(CAM_VARS) != 3:
+    sys.exit(f"build: expected 3 camera variables, found {len(CAM_VARS)}")
+for ln in CAM_VARS:
+    s = s.replace(ln + "\n", "", 1)
+s = must(s, "\nvariables:\n", "\nvariables:\n" + "\n".join(CAM_VARS) + "\n")
+
 OUT.write_text(s)
 print(f"wrote {OUT.name}: {len(s.splitlines())} lines, {added} notification sends extended")

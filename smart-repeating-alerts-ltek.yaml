@@ -4,7 +4,7 @@ blueprint:
 
     **Repeating, actionable alerts for doors, windows, leaks, cameras and more**
 
-    🚀 Version 2026.11.06.42
+    🚀 Version 2026.11.06.43
 
     Smart Repeating Alerts is Repeating Alert Notifications (2026.07.30.39) plus camera snapshots, more delivery options and a
     test mode. Every Repeating Alerts input keeps its name, so an existing Repeating Alerts automation switches by
@@ -1074,6 +1074,9 @@ trigger_variables:
 
 # ── Top-level variables (all declared at top level — cannot be nested) ────────
 variables:
+  camera: !input camera
+  camera_object_id: "{{ camera.split('.', 1)[1] if camera else '' }}"
+  camera_name: "{{ state_attr(camera, 'friendly_name') if camera else '' }}"
   alert_trigger_list: !input alert_trigger
   clear_trigger_list: !input clear_trigger
   resolution_trigger_list: !input resolution_trigger
@@ -1135,9 +1138,6 @@ variables:
   repeat_count: 0
   run_mode: !input run_mode
   per_entity: "{{ run_mode == 'parallel' }}"
-  camera: !input camera
-  camera_object_id: "{{ camera.split('.', 1)[1] if camera else '' }}"
-  camera_name: "{{ state_attr(camera, 'friendly_name') if camera else '' }}"
   snapshot_delay: !input snapshot_delay
   save_archive_file: !input save_archive_file
   notify_services_extra: !input notify_services

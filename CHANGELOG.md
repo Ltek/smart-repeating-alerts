@@ -3,6 +3,11 @@
 Build numbers continue from Repeating Alert Notifications (last build 2026.07.30.39). Builds .1 to .3 below were
 made locally before the numbering was settled and were never published; .42 is the first published build.
 
+## v2026.11.06.43 — 2026-11-06
+
+- FIXED: the camera variables (`camera_name`, …) were defined after `android_channel`, so a channel such as
+  `{{ camera_name }} Snapshot` came out as ` Snapshot`. They are now defined first.
+
 ## v2026.11.06.42 — 2026-11-06
 
 First published build of **Smart Repeating Alerts (Ltek)**, replacing Repeating Alert Notifications (Ltek) and Smart
