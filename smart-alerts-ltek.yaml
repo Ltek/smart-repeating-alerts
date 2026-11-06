@@ -1,0 +1,2443 @@
+blueprint:
+  name: ⚠️ Smart Alerts by LTek
+  description: |
+
+    **Repeating, actionable alerts for doors, windows, leaks, cameras and more**
+
+    🚀 Version 2026.11.06.1
+
+    Smart Alerts is Repeating Alert Notifications (2026.07.30.39) plus camera snapshots, more delivery options and a
+    test mode. Every Repeating Alerts input keeps its name, so an existing Repeating Alerts automation switches by
+    changing only its blueprint path.
+
+    New in Smart Alerts:
+    - 📸 Camera snapshot attached to every notification (snapshot delay, file path, optional archive copy)
+    - 🔗 Buttons can open a URL or a dashboard (URI) instead of running an action
+    - 📮 Extra notify services (e.g. notify.family) next to the mobile devices, and an Android notification group
+    - 🤖 Android priority, vibration pattern, LED color and the alarm stream
+    - ⏳ Cooldown: ignore a new alert this soon after the last one
+    - 🧪 Test mode: send only to test devices, or only to the Home Assistant notification bell
+    - ✏️ `action:` syntax everywhere
+
+    Author: LTek
+
+    📖 Community Discussion, Help, and Details... https://community.home-assistant.io/t/repeating-alert-notifications/888294
+
+    **FEATURES**
+    
+    ⚡ Advanced Triggering — Any trigger type (state, numeric, template, event) with optional conditions and restart mode
+    🔄 Restart Survival — Optional Timer + Text helpers preserve the repeat countdown and count across HA restarts
+    ❌ Notification Clearing — Dedicated clear trigger, auto-clear delay, and user-defined Notification ID to replace or clear alerts across automations
+    ♻️ Repeating Alerts — Configurable repeat limits, intervals, and optional repeat counter appended to title
+    ⏱️ Timing Controls — Initial delay before first alert, repeat intervals, and auto-clear delay after last repeat
+    🎬 Actionable Buttons — Up to 3 buttons + optional cancel, button timeout, and failsafe auto-action if all repeats go unanswered
+    📲 Multi-Device Delivery — Send to multiple mobile devices simultaneously
+    💬 Customizable Notifications — Templated titles and messages with built-in variables (see below)
+    👇 Tap Action — Open dashboards, URLs, or specific app views on notification tap
+    ✅ Android and iOS Specific Options — Android icon, color, persistence, channel, and custom sounds; iOS interruption levels and sounds
+    💥️ Custom Actions — Run your own actions on first trigger, on each notification, and on clear
+
+    **📖 Available Variables (use in Notification ID, title, and message)**
+    - `{{ now().strftime('%I:%M %p') }}` — Local time (e.g. 3:45 PM)
+    - `{{ now().strftime('%A') }}` — Day of week (e.g. Tuesday)
+    - `{{ now().strftime('%Y%m%d') }}` — Date stamp (e.g. 20260219)
+    - `{{ trigger.entity_id }}` — Entity that fired the trigger (if state-based)
+    - `{{ states('sensor.my_sensor') }}` — Current state of any entity
+    - `{{ trigger_entity_state }}` — State of the triggering entity at the time of trigger (e.g. on, off, open)
+    - `{{ time_since_trigger }}` — Time elapsed since trigger entity last changed (e.g. 4 min 32 sec ago), updates on each repeat
+    - `{{ friendly_name }}` - Friendly Name of the triggering entity
+    - `{{ device_name }}` — Name of the device the triggering entity belongs to (blank if entity has no device)
+    - `{{ entity_area_name }}` — Name of the area assigned to the triggering entity or its device (blank if unassigned)
+    - `{{ trigger_entity_state }}` - Display the actual state that triggered the automation
+    - `{{ trigger_fired_at | timestamp_custom('%I:%M %p') }}` — time the trigger occurred (e.g., 3:45 PM)
+    - `{{ trigger_fired_at | timestamp_custom('%Y-%m-%d %H:%M:%S') }}` — full date and time
+
+    **⚠️ Notification ID Note**
+    The Notification ID (tag) is used to replace or clear notifications on devices.
+    Sending a new notification with the same ID replaces the existing one.
+    A companion automation sharing the same Notification ID can send clear_notification to dismiss it.
+    If left blank, notifications cannot be replaced or cleared by this automation.
+
+    **⚠️ Action Buttons — How It Works**
+    Buttons appear on every notification including repeats. After each send the automation
+    waits up to the Button Timeout for a press before continuing.
+
+    - **Button pressed** → that button's action fires immediately, all remaining repeats are cancelled
+    - **Cancel pressed** → automation stops immediately, no actions fire
+    - **Timeout (mid-repeat)** → automation continues to the next repeat, no action fires yet
+    - **Timeout (final repeat)** → Auto Actions fire as a one-time failsafe, then the automation ends
+
+    The Button Timeout defaults to the Repeat Interval. For long repeat intervals, set a shorter
+    Button Timeout so the user gets a prompt response window without waiting the full interval.
+
+    Auto Actions are distinct from Custom Actions — Custom Actions fire on every notification,
+    Auto Actions fire only once after all repeats are exhausted with no button ever pressed.
+
+  source_url: https://github.com/Ltek/smart-alerts/blob/main/smart-alerts-ltek.yaml
+  domain: automation
+  input:
+
+    # ── SECTION: Alert Trigger ────────────────────────────────────────────────
+    section_trigger:
+      name: "Alert Trigger"
+      icon: mdi:lightning-bolt
+      collapsed: false
+      input:
+        alert_trigger:
+          name: "Alert Trigger"
+          description: >
+            Define what triggers the alert notification. Supports any trigger
+            type — state changes, numeric thresholds, templates, time patterns, etc.
+          default: []
+          selector:
+            trigger: {}
+
+        duration_issue_state:
+          name: "Time Delay before Alert is Sent"
+          description: >
+            How long to wait after the trigger fires before sending the alert.
+            Useful to avoid spurious alerts (e.g. only notify if a door is open for 10 minutes).
+            For state-based triggers, prefer setting the 'for' duration on the trigger itself
+            for more reliable behaviour.
+          default:
+            minutes: 0
+          selector:
+            duration:
+              enable_day: true
+
+        condition_send_notification:
+          name: "Optional Trigger Conditions"
+          description: >
+            Conditions checked after the alert trigger fires. All conditions must be true
+            for the notification to send. Useful for restricting alerts to specific times,
+            modes, or entity states.
+          default: []
+          selector:
+            condition: {}
+
+    # ── SECTION: Custom Actions ───────────────────────────────────────────────
+    section_actions:
+      name: "Custom Actions"
+      icon: mdi:cog
+      collapsed: true
+      input:
+        custom_action_first_trigger:
+          name: "Custom Action - On First Trigger"
+          description: >
+            Actions run once when the alert first triggers, before the first notification is sent.
+            Runs only on the initial trigger, not on repeats.
+          default: []
+          selector:
+            action: {}
+
+        custom_action_issue_state:
+          name: "Custom Action - On Each Notification"
+          description: Actions run each time a notification is sent (including repeats).
+          default: []
+          selector:
+            action: {}
+
+        custom_action_on_clear:
+          name: "Custom Action - On Clear"
+          description: Actions run after the notification is cleared (via clear trigger or auto-clear delay).
+          default: []
+          selector:
+            action: {}
+
+    # ── SECTION: Mobile Notifications ───────────────────────────────────────
+    section_content:
+      name: "Mobile Notifications"
+      icon: mdi:message-text
+      collapsed: true
+      input:
+        notify_device:
+          name: "Devices to Notify"
+          description: Select mobile devices to receive notifications (Home Assistant companion app).
+          default: []
+          selector:
+            device:
+              integration: mobile_app
+              multiple: true
+
+        notification_id:
+          name: "Notification ID"
+          description: >
+            A unique tag used to replace or clear this notification on devices.
+            Supports template variables (e.g. front-door-alert or alert-{{ now().strftime('%Y%m%d') }}).
+            ⚠️ If left blank, notifications cannot be replaced or cleared by this automation.
+            Multiple automations sharing the same Notification ID can replace/clear each other's alerts.
+          default: ''
+          selector:
+            text:
+              multiple: false
+              multiline: false
+
+        friendly_name:
+          name: "Custom Friendly Name"
+          description: Override the friendly name used in notification templates (e.g. Fridge, Front Door).
+          default: ''
+          selector:
+            text:
+              multiple: false
+              multiline: false
+
+        notification_title:
+          name: "Notification Title"
+          description: "Supports template variables. See descritpion above."
+          default: "{{ friendly_name }} is {{ trigger_entity_state }}"
+          selector:
+            text:
+              multiple: false
+              multiline: false
+
+        notification_message:
+          name: "Notification Message"
+          description: "Supports template variables. See descritpion above."
+          default: "{{ now().strftime('%I:%M %p') }} - {{ 'just started' if (time_since_trigger | trim) == 'just now' else 'started ' ~ time_since_trigger ~ ' ago' }}"
+          selector:
+            text:
+              multiple: false
+              multiline: false
+
+        notification_click_url:
+          name: "Open URL with tap"
+          description: URL that opens when the notification is tapped.
+          default: ''
+          selector:
+            text:
+              multiple: false
+              multiline: false
+
+    # ── SECTION: Notification Clearing ───────────────────────────────────────────────────
+    section_clear:
+      name: "Notification Clearing"
+      icon: mdi:bell-off
+      collapsed: true
+      input:
+        enable_auto_clear:
+          name: "Enable Auto-Clear"
+          description: >
+            Master switch for automatic notification clearing — covers both the Auto-Clear
+            Delay below and the automatic clear that happens when the Resolution Trigger
+            fires. Disable this if you want the notification to stay on the device until
+            manually dismissed or replaced.
+
+            ⚠️ Resolution Notification overrides Auto-Clear. If Send Resolution Notification
+            (in the Resolution Trigger & Notification section) is enabled, the Resolution
+            Notification is sent instead of clearing, regardless of this setting.
+
+            This does not affect the Trigger to Clear Notification below — that is a manual,
+            explicit clear and always runs when it fires.
+          default: true
+          selector:
+            boolean: {}
+        auto_clear_delay:
+          name: "Auto-Clear Delay"
+          description: >
+            After all repeats have completed (or after the first notification if repeats
+            are disabled), wait this duration then automatically clear the notification
+            on all devices. Set to 0 to disable — clearing will only happen via the
+            Trigger to Clear Notification above, or a companion automation sharing the same Notification ID.
+            Has no effect if Enable Auto-Clear above is off.
+
+            ⚠️ Resolution Notification overrides Auto-Clear.
+          default:
+            hours: 0
+            minutes: 0
+            seconds: 0
+          selector:
+            duration:
+              enable_day: false
+        clear_trigger:
+          name: "Trigger to Force Notification Clearing"
+          description: >
+            When this trigger fires, the notification is immediately cleared on all devices
+            using the Notification ID. Leave empty if you only want auto-clear by delay,
+            or if clearing is handled externally.
+
+            ⚠️ This trigger must be different from the Alert Trigger above. If both
+            triggers fire at the same time or on the same condition, the automation
+            will conflict — sending and clearing the notification simultaneously.
+          default: []
+          selector:
+            trigger: {}
+
+    # ── SECTION: Repeat ───────────────────────────────────────────────────────
+    section_repeat:
+      name: "Repeat Alerts"
+      icon: mdi:repeat
+      collapsed: true
+      input:
+        repeat_notification:
+          name: "Repeat Alerts"
+          description: >
+            Repeat the notification at a set interval until auto-clear fires or the repeat limit is reached.
+            If Action Buttons are configured, pressing a button on any repeat will cancel all remaining repeats.
+            When enabled, the Delay Between Repeats controls the full repeat cycle — it is used as both
+            the interval between notifications and the button press timeout, so the cycle is always exactly
+            the interval you set.
+          default: false
+          selector:
+            boolean: {}
+
+        max_repeat_count:
+          name: "Maximum Repeat Count"
+          description: Maximum number of repeats. Set to 0 for unlimited.
+          default: 0
+          selector:
+            number:
+              min: 0.0
+              max: 100.0
+              step: 1.0
+              mode: box
+
+        time_between_repeat_notification:
+          name: "Delay Between Repeats"
+          description: >
+            Time between repeat notifications. When Action Buttons are enabled, this value also
+            serves as the button press timeout — meaning the full repeat cycle is exactly this
+            duration (not this plus a separate timeout). If no button is pressed within this
+            window, the next repeat fires automatically.
+          default:
+            minutes: 1
+          selector:
+            duration:
+              enable_day: true
+
+        show_repeat_count:
+          name: "Show Repeat Count in Title"
+          description: >
+            When enabled, appends the current repeat number to the notification title.
+            Format: "Your Title (1)", "Your Title (2)", "Your Title (3)", etc.
+            The first notification shows (1), each repeat increments by one.
+          default: false
+          selector:
+            boolean: {}
+
+    # ── SECTION: Action Buttons ───────────────────────────────────────────────
+    section_buttons:
+      name: "Action Buttons"
+      icon: mdi:gesture-tap-button
+      collapsed: true
+      input:
+        include_action_buttons:
+          name: "Enable Action Buttons"
+          description: >
+            Select which buttons to show on the first notification.
+            Buttons only appear on the first notification, not on repeats.
+            If a button is pressed, the repeat loop is skipped and the button's action fires instead.
+          default: []
+          selector:
+            select:
+              options:
+              - label: "Button 1"
+                value: enable_action_button_1
+              - label: "Button 2"
+                value: enable_action_button_2
+              - label: "Button 3"
+                value: enable_action_button_3
+              multiple: true
+              custom_value: false
+              sort: false
+
+        include_auto_actions:
+          name: "Auto Actions on Timeout (Failsafe)"
+          description: >
+            Select which button actions should fire automatically as a failsafe if all repeats
+            complete and no button was ever pressed. Fires once only, after the final repeat times out.
+            If no repeats are configured, fires after the first (and only) notification times out.
+            Leave empty to take no automatic action.
+          default: []
+          selector:
+            select:
+              options:
+              - label: "Button 1 Action"
+                value: enable_auto_action_1
+              - label: "Button 2 Action"
+                value: enable_auto_action_2
+              - label: "Button 3 Action"
+                value: enable_auto_action_3
+              multiple: true
+              custom_value: false
+              sort: false
+
+        action_button_timeout:
+          name: "Button Timeout"
+          description: >
+            How long to wait for a button press before the automation continues.
+            Only applies when Repeating is disabled. When repeating is enabled, the
+            Delay Between Repeats is used as the timeout instead — so the repeat cycle
+            stays exactly the interval you set with no extra wait stacked on top.
+          default:
+            hours: 0
+            minutes: 0
+            seconds: 0
+          selector:
+            duration: {}
+
+        action_button_1_label:
+          name: "Button 1 Label"
+          description: Text displayed on button 1.
+          default: 'Acknowledge'
+          selector:
+            text: {}
+
+        action_button_1_uri:
+          name: "Button 1 URI (optional)"
+          description: >
+            Open this URL, dashboard path (e.g. /dashboard-home/cameras) or app view (e.g. entityId:camera.patio)
+            instead of running Button 1 Action.
+          default: ""
+          selector:
+            text: {}
+
+        action_button_1_action:
+          name: "Button 1 Action"
+          description: Actions to run when Button 1 is pressed.
+          default: []
+          selector:
+            action: {}
+
+        action_button_2_label:
+          name: "Button 2 Label"
+          description: Text displayed on button 2.
+          default: 'Snooze'
+          selector:
+            text: {}
+
+        action_button_2_uri:
+          name: "Button 2 URI (optional)"
+          description: >
+            Open this URL, dashboard path (e.g. /dashboard-home/cameras) or app view (e.g. entityId:camera.patio)
+            instead of running Button 2 Action.
+          default: ""
+          selector:
+            text: {}
+
+        action_button_2_action:
+          name: "Button 2 Action"
+          description: Actions to run when Button 2 is pressed.
+          default: []
+          selector:
+            action: {}
+
+        action_button_3_label:
+          name: "Button 3 Label"
+          description: Text displayed on button 3.
+          default: 'Ignore'
+          selector:
+            text: {}
+
+        action_button_3_uri:
+          name: "Button 3 URI (optional)"
+          description: >
+            Open this URL, dashboard path (e.g. /dashboard-home/cameras) or app view (e.g. entityId:camera.patio)
+            instead of running Button 3 Action.
+          default: ""
+          selector:
+            text: {}
+
+        action_button_3_action:
+          name: "Button 3 Action"
+          description: Actions to run when Button 3 is pressed.
+          default: []
+          selector:
+            action: {}
+
+        include_cancel_button:
+          name: "Show Cancel Button"
+          description: >
+            When enabled, a Cancel button is appended after any action buttons.
+            Pressing it stops the automation immediately — no actions fire and all repeats
+            are cancelled. Disable this if you want to prevent users from dismissing
+            the alert without taking a defined action.
+          default: true
+          selector:
+            boolean: {}
+
+        action_button_stop_label:
+          name: "Cancel Button Label"
+          description: >
+            Text for the cancel button. Only shown when Show Cancel Button is enabled above.
+            Pressing cancel stops the automation — no actions fire and repeats are cancelled.
+          default: 'Cancel'
+          selector:
+            text: {}
+
+    # ── SECTION: Final Notification ─────────────────────────────────────────
+    section_final_notification:
+      name: "Final Notification"
+      icon: mdi:bell-alert
+      collapsed: true
+      input:
+        enable_final_notification:
+          name: "Enable Final Notification"
+          description: >
+            When Repeating is enabled, send one last notification after all repeats are
+            exhausted and the final button timeout expires. Useful to inform the user
+            that the alert is ending or that an auto-action has been triggered.
+            Has no effect when Repeating is disabled.
+          default: false
+          selector:
+            boolean: {}
+
+        final_notification_title:
+          name: "Final Notification Title"
+          description: "Supports the same template variables as the main notification title."
+          default: "Final Alert... {{ friendly_name }} is {{ trigger_entity_state }}"
+          selector:
+            text:
+              multiple: false
+              multiline: false
+
+        final_notification_message:
+          name: "Final Notification Message"
+          description: "Supports the same template variables as the main notification message."
+          default: "{{ now().strftime('%I:%M %p') }}"
+          selector:
+            text:
+              multiple: false
+              multiline: false
+
+        custom_action_final_notification:
+          name: "Custom Action - On Final Notification"
+          description: >
+            Actions run when the final notification is sent.
+            Only fires when Final Notification is enabled and all repeats are exhausted.
+          default: []
+          selector:
+            action: {}
+
+    # ── SECTION: Cancelled Alert Notification ───────────────────────────────
+    section_cancelled_notification:
+      name: "Cancelled Alert Notification"
+      icon: mdi:cancel
+      collapsed: true
+      input:
+        enable_cancelled_notification:
+          name: "Enable Cancelled Notification"
+          description: >
+            When the Cancel button is pressed (on the first notification, a repeat, or
+            the final notification), send one notification confirming the alert was
+            cancelled — so the user knows it took effect. Sent to the same devices and
+            replaces the original notification (same Notification ID) rather than
+            stacking a second one.
+          default: true
+          selector:
+            boolean: {}
+
+        cancelled_notification_title:
+          name: "Cancelled Notification Title"
+          description: "Supports the same template variables as the main notification title."
+          default: "🚫 Alert Cancelled"
+          selector:
+            text:
+              multiple: false
+              multiline: false
+
+        cancelled_notification_message:
+          name: "Cancelled Notification Message"
+          description: "Supports the same template variables as the main notification message."
+          default: "You cancelled the {{ friendly_name }} alert at {{ now().strftime('%I:%M %p') }}"
+          selector:
+            text:
+              multiple: false
+              multiline: false
+
+        custom_action_cancelled_notification:
+          name: "Custom Action - On Cancelled Notification"
+          description: >
+            Actions run when the cancelled notification is sent.
+            Only fires when Cancelled Notification is enabled and the Cancel button is pressed.
+          default: []
+          selector:
+            action: {}
+
+    # ── SECTION: Resolution Trigger ──────────────────────────────────────────
+    section_resolution:
+      name: "Resolution Trigger & Notification"
+      icon: mdi:check-circle-outline
+      collapsed: true
+      input:
+        enable_resolution_notification:
+          name: "Enable Resolution Notification"
+          description: >
+            When enabled, a single notification is sent after the alert is cleared.
+            Uses the title, message, and buttons configured below.
+
+            ⚠️ Resolution Notification overrides Auto-Clear. When this is enabled, the
+            Resolution Trigger sends this notification instead of clearing the existing
+            one (even if Enable Auto-Clear is on).
+          default: false
+          selector:
+            boolean: {}
+            
+        resolution_trigger:
+          name: "Resolution Trigger"
+          description: >
+            When this trigger fires, the automation immediately stops any active repeats,
+            clears the existing notification on all devices, and optionally sends one
+            final "resolved" notification with its own set of action buttons.
+
+            Example use: a group entity going 'off' when all windows are closed, or a
+            lock entity going 'locked', or an alarm arming.
+
+            ⚠️ Must be a different condition from the Alert Trigger above to avoid conflicts.
+          default: []
+          selector:
+            trigger: {}
+
+        resolution_notification_title:
+          name: "Resolution Notification Title"
+          description: "Supports the same template variables as the main notification title."
+          default: "Alert Resolved... {{ friendly_name }} is {{ trigger_entity_state }}"
+          selector:
+            text:
+              multiple: false
+              multiline: false
+
+        resolution_notification_message:
+          name: "Resolution Notification Message"
+          description: "Supports the same template variables as the main notification message."
+          default: "{{ now().strftime('%I:%M %p') }}"
+          selector:
+            text:
+              multiple: false
+              multiline: false
+
+        resolution_notification_click_url:
+          name: "Resolution Notification — Open URL with tap"
+          description: URL that opens when the resolution notification is tapped. Leave blank to reuse the main notification URL.
+          default: ''
+          selector:
+            text:
+              multiple: false
+              multiline: false
+
+        resolution_notification_color:
+          name: "Resolution Notification Color"
+          description: The color of the resolution notification.
+          default: green
+          selector:
+            select:
+              options:
+              - red
+              - orange
+              - yellow
+              - green
+              - blue
+              - purple
+              custom_value: false
+              multiple: false
+              sort: false
+
+        resolution_notification_icon:
+          name: "Resolution Notification Icon"
+          description: The icon shown on the resolved notification.
+          default: check-circle
+          selector:
+            select:
+              options:
+              - check-circle
+              - check-circle-outline
+              - home
+              - home-assistant
+              - lock
+              - shield-check
+              - window-closed
+              - door
+              custom_value: false
+              multiple: false
+              sort: false
+
+        include_resolution_buttons:
+          name: "Enable Resolution Action Buttons"
+          description: Select which buttons to show on the resolution notification.
+          default: []
+          selector:
+            select:
+              options:
+              - label: "Resolution Button 1"
+                value: enable_resolution_button_1
+              - label: "Resolution Button 2"
+                value: enable_resolution_button_2
+              - label: "Resolution Button 3"
+                value: enable_resolution_button_3
+              multiple: true
+              custom_value: false
+              sort: false
+
+        resolution_button_timeout:
+          name: "Resolution Button Timeout"
+          description: >
+            How long to wait for a resolution button press before the automation ends.
+            Set to 0 to fire and forget (no wait).
+          default:
+            hours: 0
+            minutes: 0
+            seconds: 0
+          selector:
+            duration: {}
+
+        resolution_button_1_label:
+          name: "Resolution Button 1 Label"
+          description: Text displayed on resolution button 1.
+          default: 'Do Something'
+          selector:
+            text: {}
+
+        resolution_button_1_action:
+          name: "Resolution Button 1 Action"
+          description: Actions to run when Resolution Button 1 is pressed.
+          default: []
+          selector:
+            action: {}
+
+        resolution_button_2_label:
+          name: "Resolution Button 2 Label"
+          description: Text displayed on resolution button 2.
+          default: 'Dismiss'
+          selector:
+            text: {}
+
+        resolution_button_2_action:
+          name: "Resolution Button 2 Action"
+          description: Actions to run when Resolution Button 2 is pressed.
+          default: []
+          selector:
+            action: {}
+
+        resolution_button_3_label:
+          name: "Resolution Button 3 Label"
+          description: Text displayed on resolution button 3.
+          default: ''
+          selector:
+            text: {}
+
+        resolution_button_3_action:
+          name: "Resolution Button 3 Action"
+          description: Actions to run when Resolution Button 3 is pressed.
+          default: []
+          selector:
+            action: {}
+
+        custom_action_on_resolution:
+          name: "Custom Action - On Resolution"
+          description: >
+            Actions run immediately when the resolution trigger fires, before the resolution
+            notification is sent. Useful for logging, resetting helpers, etc.
+          default: []
+          selector:
+            action: {}
+
+    # ── SECTION: Restart Persistence ─────────────────────────────────────────────
+    section_persistence:
+      name: "Restart Persistence"
+      description: Reccomended to enable this when using long timeframes
+      icon: mdi:restart
+      collapsed: true
+      input:
+        include_persistence:
+          name: "Enable Restart Persistence"
+          description: >
+            When enabled, the repeat countdown and count survive HA restarts.
+            Requires a Timer helper and a Text helper selected below.
+
+            When creating the Timer helper, tick the "Restore" box so it resumes
+            after a restart. Each automation instance needs its own dedicated pair
+            of helpers.
+          default: false
+          selector:
+            boolean: {}
+
+        persistence_timer:
+          name: "Timer Helper"
+          description: >
+            Select the Timer helper. Only active when restart persistence is enabled above.
+
+            Create via Settings -> Helpers -> Add Helper -> Timer.
+            Tick the "Restore" box. Do not set a duration in the helper.
+          default: []
+          selector:
+            entity:
+              filter:
+              - domain:
+                - timer
+              multiple: false
+
+        persistence_text:
+          name: "Text Helper"
+          description: >
+            Select the Text (input_text) helper. Only active when restart persistence is enabled above.
+
+            Create via Settings -> Helpers -> Add Helper -> Text.
+          default: []
+          selector:
+            entity:
+              filter:
+              - domain:
+                - input_text
+              multiple: false
+
+    # ── SECTION: Persistent UI Notifications ────────────────────────────────────
+    section_webui:
+      name: "Persistent UI Notifications"
+      icon: mdi:monitor-eye
+      collapsed: true
+      input:
+        enable_webui_normal_notifications:
+          name: "Normal - mirror Mobile Notifications in the UI"
+          description: >
+            When enabled, every notification sent to a mobile device (first alert, repeats,
+            final notification, and resolution notification) is also created as a persistent
+            notification in the Home Assistant UI (Settings → Notifications), using the same
+            title and message. It updates in place on each repeat rather than stacking, and is
+            dismissed automatically whenever the mobile notification is cleared — via the
+            Trigger to Force Notification Clearing, the Resolution Trigger, or the Auto-Clear Delay.
+
+            Useful if you don't always carry your phone, or want alerts visible on a
+            wall-mounted dashboard / kiosk.
+          default: false
+          selector:
+            boolean: {}
+
+        enable_webui_debug_notifications:
+          name: "Debug"
+          description: >
+            When enabled, sends a running trace of persistent notifications to the Home
+            Assistant UI at each step of the automation's execution — trigger detected,
+            delays, notifications sent, button presses/timeouts, repeat loop progress,
+            clearing, and resolution.
+
+            Each step creates a new, separate persistent notification (they are not replaced
+            or grouped), so Settings → Notifications ends up with a full step-by-step history
+            of the run — helpful for troubleshooting why an alert did or didn't behave as
+            expected.
+
+            ⚠️ Verbose. Not recommended to leave on permanently — clear the notifications
+            afterward from Settings → Notifications → Clear All.
+          default: false
+          selector:
+            boolean: {}
+
+    # ── SECTION: Camera Snapshot (from Smart Camera Notifications) ─────────────
+    section_camera:
+      name: "Camera Snapshot"
+      icon: mdi:cctv
+      collapsed: true
+      input:
+        camera:
+          name: "Camera"
+          description: Take a snapshot from this camera and attach it to every notification. Leave empty for none.
+          default: ""
+          selector:
+            entity:
+              domain: camera
+        snapshot_delay:
+          name: "Snapshot Delay"
+          description: Seconds to wait after the trigger before the snapshot.
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 30
+              step: 0.5
+              unit_of_measurement: s
+        snapshot_file_path:
+          name: "Snapshot File Path"
+          description: >
+            Where the snapshot is saved. Under /media it is sent as /media/local/..., under /config/www as /local/...
+          default: "/media/snapshots/{{ camera_object_id }}_last.jpg"
+          selector:
+            text: {}
+        save_archive_file:
+          name: "Save an Archive Copy"
+          default: false
+          selector:
+            boolean: {}
+        archive_file_path:
+          name: "Archive File Path"
+          default: "/media/snapshots/{{ camera_object_id }}/{{ now().strftime('%Y%m%d_%H%M%S') }}.jpg"
+          selector:
+            text: {}
+
+    # ── SECTION: More Delivery Options ───────────────────────────────────────────
+    section_delivery:
+      name: "More Delivery Options"
+      icon: mdi:send-variant
+      collapsed: true
+      input:
+        notify_services:
+          name: "Extra Notify Services"
+          description: Also send to these notify services (e.g. notify.family, notify.living_room_tv).
+          default: []
+          selector:
+            select:
+              options: []
+              custom_value: true
+              multiple: true
+        notification_group:
+          name: "Notification Group (Android)"
+          description: Android groups notifications with the same group name.
+          default: ""
+          selector:
+            text: {}
+        cooldown_time:
+          name: "Cooldown"
+          description: Ignore a new alert this many seconds after the last one (0 = off). Useful for cameras.
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 3600
+              unit_of_measurement: s
+        test_mode:
+          name: "Test Mode"
+          description: >
+            Send only to the Test Devices below (and the Home Assistant notification bell), not to Devices to Notify
+            or the extra notify services. Actions, buttons and repeats run as normal.
+          default: false
+          selector:
+            boolean: {}
+        test_notify_device:
+          name: "Test Devices"
+          default: []
+          selector:
+            device:
+              integration: mobile_app
+              multiple: true
+
+    # ── SECTION: Android Options ──────────────────────────────────────────────
+    section_android:
+      name: "Android Options"
+      icon: mdi:robot
+      collapsed: true
+      input:
+        notification_icon_warning:
+          name: "Notification Icon"
+          description: The icon shown in the alert notification.
+          default: alert
+          selector:
+            select:
+              options:
+              - alert
+              - alert-circle
+              - door
+              - door-open
+              - motion-sensor
+              - fridge
+              - fridge-alert
+              - home
+              - home-alert
+              - home-assistant
+              - window-closed
+              - window-open
+              - window-open-variant
+              custom_value: true
+              multiple: false
+              sort: false
+
+        notification_color:
+          name: "Notification Color"
+          description: The color of the notification.
+          default: red
+          selector:
+            select:
+              options:
+              - red
+              - orange
+              - yellow
+              - green
+              - blue
+              - purple
+              custom_value: false
+              multiple: false
+              sort: false
+
+        notification_persistent:
+          name: "Persistent Notification"
+          description: >
+            Notification cannot be closed manually — stays until auto-clear fires
+            or a companion automation clears it. Works well combined with Repeat Alerts.
+          default: false
+          selector:
+            boolean: {}
+
+        android_sound:
+          name: "Custom Sound file"
+          description: >
+            The filename of the sound file imported into your Android device (e.g. 'custom_sound'). 
+            Do NOT include the extension (like .mp3). Sound must be placed in your device's Notification folder before use.
+            Leave blank for the default notification tone.
+          default: ''
+          selector:
+            text: {}
+
+        android_channel:
+          name: "Notification Channel"
+          description: >
+            Required for custom sounds on Android. If you change your custom sound later, you MUST change this channel name 
+            (e.g., 'alert_channel_v2') to force Android to create a new channel and bind the new sound to it.
+          default: 'alert_channel'
+          selector:
+            text: {}
+
+        wake_screen_notification:
+          name: "Wake Screen for Notifications"
+          description: >
+            Note: May not work on all phones. 
+            Sends a command to wake the screen. Good for Important messages. Does not apply to
+            Persistent Web UI Notifications.
+          default: false
+          selector:
+            boolean: {}
+
+        android_priority:
+          name: "Priority (Android)"
+          description: high delivers at once, even in Doze.
+          default: default
+          selector:
+            select:
+              options: [default, high]
+        android_alarm_stream:
+          name: "Use the Alarm Stream (Android)"
+          description: Play the notification sound as an alarm, even when the phone is silent (channel alarm_stream).
+          default: false
+          selector:
+            boolean: {}
+        android_vibration_pattern:
+          name: "Vibration Pattern (Android)"
+          description: e.g. 100, 1000, 100, 1000 (only used when a new channel is created).
+          default: ""
+          selector:
+            text: {}
+        android_led_color:
+          name: "LED Color (Android)"
+          description: e.g. red or #FF0000 (only used when a new channel is created).
+          default: ""
+          selector:
+            text: {}
+
+    # ── SECTION: iOS Options ──────────────────────────────────────────────────
+    section_ios:
+      name: "iOS Options"
+      icon: mdi:apple
+      collapsed: true
+      input:
+        notification_interruption_level:
+          name: "Interruption Level"
+          description: Controls the intrusiveness of the notification on iOS devices.
+          default: active
+          selector:
+            select:
+              options:
+              - passive
+              - active
+              - time-sensitive
+              - critical
+              custom_value: false
+              multiple: false
+              sort: false
+
+        ios_sound:
+          name: "Custom Sound file"
+          description: >
+            The name of the sound file imported into Home Assistant Companion App on iOS 
+            (e.g., 'custom_sound.wav'). It must be added to your mobile app config or pre-packaged.
+            Leave blank for the default notification tone.
+          default: ''
+          selector:
+            text: {}
+
+mode: restart
+max_exceeded: silent
+
+trigger_variables:
+  _alert_triggers: !input alert_trigger
+
+# ── Top-level variables (all declared at top level — cannot be nested) ────────
+variables:
+  alert_trigger_list: !input alert_trigger
+  clear_trigger_list: !input clear_trigger
+  resolution_trigger_list: !input resolution_trigger
+  alert_trigger_count: '{{ alert_trigger_list | count }}'
+  clear_trigger_count: '{{ clear_trigger_list | count }}'
+  resolution_trigger_count: '{{ resolution_trigger_list | count }}'
+  custom_friendly_name: !input friendly_name
+  notification_id_template: !input notification_id
+  duration_issue_state: !input duration_issue_state
+  condition_send_notification: !input condition_send_notification
+  notify_device: !input notify_device
+  notification_click_url: !input notification_click_url
+  repeat_notification: !input repeat_notification
+  show_repeat_count: !input show_repeat_count
+  max_repeat_count: !input max_repeat_count
+  time_between_repeat_notification: !input time_between_repeat_notification
+  notification_icon_warning: !input notification_icon_warning
+  notification_color: !input notification_color
+  notification_persistent: !input notification_persistent
+  notification_interruption_level: !input notification_interruption_level
+  android_sound: !input android_sound
+  android_channel: !input android_channel
+  wake_screen_notification: !input wake_screen_notification
+  ios_sound: !input ios_sound
+  include_action_buttons: !input include_action_buttons
+  include_cancel_button: !input include_cancel_button
+  action_button_1_label: !input action_button_1_label
+  action_button_2_label: !input action_button_2_label
+  action_button_3_label: !input action_button_3_label
+  action_button_1_uri: !input action_button_1_uri
+  action_button_2_uri: !input action_button_2_uri
+  action_button_3_uri: !input action_button_3_uri
+  action_button_stop_label: !input action_button_stop_label
+  action_button_timeout: !input action_button_timeout
+  include_auto_actions: !input include_auto_actions
+  enable_final_notification: !input enable_final_notification
+  final_notification_message: !input final_notification_message
+  enable_cancelled_notification: !input enable_cancelled_notification
+  custom_action_first_trigger: !input custom_action_first_trigger
+  custom_action_issue_state: !input custom_action_issue_state
+  custom_action_on_clear: !input custom_action_on_clear
+  enable_auto_clear: !input enable_auto_clear
+  auto_clear_delay: !input auto_clear_delay
+  enable_webui_normal_notifications: !input enable_webui_normal_notifications
+  enable_webui_debug_notifications: !input enable_webui_debug_notifications
+  include_persistence: !input include_persistence
+  persistence_timer: !input persistence_timer
+  persistence_text: !input persistence_text
+  enable_resolution_notification: !input enable_resolution_notification
+  resolution_notification_message: !input resolution_notification_message
+  resolution_notification_click_url: !input resolution_notification_click_url
+  resolution_notification_color: !input resolution_notification_color
+  resolution_notification_icon: !input resolution_notification_icon
+  include_resolution_buttons: !input include_resolution_buttons
+  resolution_button_timeout: !input resolution_button_timeout
+  resolution_button_1_label: !input resolution_button_1_label
+  resolution_button_2_label: !input resolution_button_2_label
+  resolution_button_3_label: !input resolution_button_3_label
+  repeat_count: 0
+  camera: !input camera
+  camera_object_id: "{{ camera.split('.', 1)[1] if camera else '' }}"
+  camera_name: "{{ state_attr(camera, 'friendly_name') if camera else '' }}"
+  snapshot_delay: !input snapshot_delay
+  save_archive_file: !input save_archive_file
+  notify_services_extra: !input notify_services
+  notification_group: !input notification_group
+  cooldown_time: !input cooldown_time
+  test_mode: !input test_mode
+  test_notify_device: !input test_notify_device
+  android_priority: !input android_priority
+  android_alarm_stream: !input android_alarm_stream
+  android_vibration_pattern: !input android_vibration_pattern
+  android_led_color: !input android_led_color
+  time: "{{ now().strftime('%I:%M %p') }}"
+
+triggers:
+  - triggers: !input alert_trigger
+  - triggers: !input clear_trigger
+  - triggers: !input resolution_trigger
+  - trigger: homeassistant
+    event: start
+    id: ha_restart
+
+actions:
+  - variables:
+      notify_services_list: >
+        {% set ns = namespace(services=[]) %}
+        {% for device_id in (test_notify_device if test_mode else notify_device) %}
+          {% set matched = device_entities(device_id)
+              | select('match', 'notify\.mobile_app_')
+              | list %}
+          {% if matched | length > 0 %}
+            {% set ns.services = ns.services + [matched[0]] %}
+          {% else %}
+            {% set device_name = device_attr(device_id, 'name') | slugify %}
+            {% set ns.services = ns.services + ['notify.mobile_app_' ~ device_name] %}
+          {% endif %}
+        {% endfor %}
+        {% if not test_mode %}
+          {% for svc in notify_services_extra %}
+            {% set svc = svc | trim %}
+            {% if svc %}{% set ns.services = ns.services + [svc if svc.startswith('notify.') else 'notify.' ~ svc] %}{% endif %}
+          {% endfor %}
+        {% endif %}
+        {{ ns.services | unique | list }}
+      number_of_notify_services: '{{ notify_services_list | count }}'
+      notification_tag: '{{ notification_id_template }}'
+      trigger_fired_at: >
+        {% if trigger.to_state is defined and trigger.to_state is not none %}
+          {{ trigger.to_state.last_changed | as_timestamp }}
+        {% else %}
+          {{ as_timestamp(now()) }}
+        {% endif %}
+      trigger_entity_state: >
+        {% if trigger.to_state is defined and trigger.to_state is not none %}
+          {{ trigger.to_state.state }}
+        {% elif trigger.get('entity_id') %}
+          {{ states(trigger.get('entity_id')) }}
+        {% else %}
+          unknown
+        {% endif %}
+      friendly_name: >
+        {% if custom_friendly_name != '' %}
+          {{ custom_friendly_name }}
+        {% elif trigger.get('entity_id') %}
+          {{ state_attr(trigger.get('entity_id'), 'friendly_name') | default(trigger.get('entity_id')) | default('Alert') }}
+        {% else %}
+          Alert
+        {% endif %}
+      device_name: >
+        {% if trigger.get('entity_id') and device_id(trigger.get('entity_id')) %}
+          {{ device_attr(device_id(trigger.get('entity_id')), 'name') | default('') }}
+        {% else %}
+        {% endif %}
+      entity_area_name: >
+        {% if trigger.get('entity_id') %}
+          {{ area_name(trigger.get('entity_id')) | default('') }}
+        {% else %}
+        {% endif %}
+      persist_entity_id: '{{ trigger.get("entity_id", "") }}'
+      webui_notification_id: '{{ "webui_" ~ (notification_id_template if notification_id_template != "" else context.id) }}'
+
+  # ── DEBUG: automation triggered ─────────────────────────────────────────────
+  - if:
+      - condition: template
+        value_template: '{{ enable_webui_debug_notifications }}'
+    then:
+      - action: persistent_notification.create
+        data:
+          title: "🚨 Smart Alert - Alert Automation Triggered"
+          message: |
+            Automation has been triggered at {{ now().strftime('%I:%M:%S %p') }}
+
+            **Trigger Details:**
+            - Trigger Type: {{ trigger.platform }}
+            - Trigger ID: {{ trigger.id }}
+            - Friendly Name: {{ friendly_name }}
+            - Entity State: {{ trigger_entity_state }}
+            - Notification Tag: {{ notification_tag }}
+            - Devices to Notify: {{ number_of_notify_services }}
+            - Repeat Enabled: {{ repeat_notification }}
+            - Max Repeats: {{ max_repeat_count }}
+            - Repeat Interval: {{ time_between_repeat_notification }}
+
+  - condition: template
+    value_template: >
+      {{ trigger.id == "ha_restart" or
+         (trigger.idx is defined and
+          trigger.idx | int(-1) < (alert_trigger_count + clear_trigger_count + resolution_trigger_count)) }}
+
+  # ── Smart Alerts: cooldown, then the camera snapshot ─────────────────────────
+  - variables:
+      is_alert_trigger: "{{ trigger.idx is defined and trigger.idx | int(-1) < alert_trigger_count }}"
+      snapshot_create_file_path: !input snapshot_file_path
+      archive_create_file_path: !input archive_file_path
+      snapshot_url: >
+        {% if camera %}{{ snapshot_create_file_path | replace('/config/www', '/local') | replace('/media', '/media/local', 1) }}{% endif %}
+  - condition: template
+    value_template: >
+      {{ not is_alert_trigger or cooldown_time | int(0) <= 0 or not this.attributes.last_triggered or
+         (now() - this.attributes.last_triggered).total_seconds() > cooldown_time | int(0) }}
+  - if:
+      - condition: template
+        value_template: "{{ is_alert_trigger and camera != '' }}"
+    then:
+      - delay:
+          seconds: "{{ snapshot_delay | float(0) }}"
+      - action: camera.snapshot
+        target:
+          entity_id: "{{ camera }}"
+        data:
+          filename: "{{ snapshot_create_file_path }}"
+        continue_on_error: true
+      - if:
+          - condition: template
+            value_template: "{{ save_archive_file }}"
+        then:
+          - action: camera.snapshot
+            target:
+              entity_id: "{{ camera }}"
+            data:
+              filename: "{{ archive_create_file_path }}"
+            continue_on_error: true
+
+  - choose:
+
+      # ── HA RESTART RECOVERY ───────────────────────────────────────────────
+      - conditions:
+          - condition: template
+            value_template: '{{ trigger.id == "ha_restart" }}'
+        sequence:
+          - if:
+              - condition: template
+                value_template: '{{ enable_webui_debug_notifications }}'
+            then:
+              - action: persistent_notification.create
+                data:
+                  title: "🔄 Smart Alert - HA Restart Detected"
+                  message: "Checking if alert was in progress..."
+          - condition: template
+            value_template: >
+              {{ include_persistence == true and
+                 is_state(persistence_timer, 'active') }}
+          - variables:
+              _raw: '{{ states(persistence_text) }}'
+              _data: '{{ _raw | from_json if _raw not in ["", "{}"] else {} }}'
+              trigger_fired_at: '{{ _data.get("fired_at", as_timestamp(now())) | float }}'
+              repeat_count: '{{ _data.get("count", 0) | int }}'
+              persist_entity_id: '{{ _data.get("entity_id", "") }}'
+              notify_services_list: >
+                {% set ns = namespace(services=[]) %}
+                {% for device_id in (test_notify_device if test_mode else notify_device) %}
+                  {% set matched = device_entities(device_id)
+                      | select('match', 'notify\.mobile_app_')
+                      | list %}
+                  {% if matched | length > 0 %}
+                    {% set ns.services = ns.services + [matched[0]] %}
+                  {% else %}
+                    {% set device_name = device_attr(device_id, 'name') | slugify %}
+                    {% set ns.services = ns.services + ['notify.mobile_app_' ~ device_name] %}
+                  {% endif %}
+                {% endfor %}
+                {% if not test_mode %}
+                  {% for svc in notify_services_extra %}
+                    {% set svc = svc | trim %}
+                    {% if svc %}{% set ns.services = ns.services + [svc if svc.startswith('notify.') else 'notify.' ~ svc] %}{% endif %}
+                  {% endfor %}
+                {% endif %}
+                {{ ns.services | unique | list }}
+              number_of_notify_services: '{{ notify_services_list | count }}'
+              notification_tag: '{{ notification_id_template }}'
+              trigger_entity_state: ''
+              friendly_name: >
+                {% if custom_friendly_name != '' %}
+                  {{ custom_friendly_name }}
+                {% elif persist_entity_id != '' %}
+                  {{ state_attr(persist_entity_id, 'friendly_name') | default(persist_entity_id) | default('Alert') }}
+                {% else %}
+                  Alert
+                {% endif %}
+              device_name: >
+                {% if persist_entity_id != '' and device_id(persist_entity_id) %}
+                  {{ device_attr(device_id(persist_entity_id), 'name') | default('') }}
+                {% else %}
+                {% endif %}
+              entity_area_name: >
+                {% if persist_entity_id != '' %}
+                  {{ area_name(persist_entity_id) | default('') }}
+                {% else %}
+                {% endif %}
+              action_btn_1: '{{ "BTN1_" ~ context.id }}'
+              action_btn_2: '{{ "BTN2_" ~ context.id }}'
+              action_btn_3: '{{ "BTN3_" ~ context.id }}'
+              action_btn_stop: '{{ "STOP_" ~ context.id }}'
+              actions_list: >
+                {% set actions = [] %}
+                {% if 'enable_action_button_1' in include_action_buttons and action_button_1_label != '' %}
+                  {% set uri = action_button_1_uri | default('') %}{% set actions = actions + [{'action': 'URI', 'title': action_button_1_label, 'uri': uri} if uri else {'action': 'BTN1_' ~ context.id, 'title': action_button_1_label}] %}
+                {% endif %}
+                {% if 'enable_action_button_2' in include_action_buttons and action_button_2_label != '' %}
+                  {% set uri = action_button_2_uri | default('') %}{% set actions = actions + [{'action': 'URI', 'title': action_button_2_label, 'uri': uri} if uri else {'action': 'BTN2_' ~ context.id, 'title': action_button_2_label}] %}
+                {% endif %}
+                {% if 'enable_action_button_3' in include_action_buttons and action_button_3_label != '' %}
+                  {% set uri = action_button_3_uri | default('') %}{% set actions = actions + [{'action': 'URI', 'title': action_button_3_label, 'uri': uri} if uri else {'action': 'BTN3_' ~ context.id, 'title': action_button_3_label}] %}
+                {% endif %}
+                {% if include_action_buttons | length > 0 and include_cancel_button and action_button_stop_label != '' %}
+                  {% set actions = actions + [{'action': 'STOP_' ~ context.id, 'title': action_button_stop_label}] %}
+                {% endif %}
+                {{ actions }}
+              last_wait_timed_out: false
+          - if:
+              - condition: template
+                value_template: '{{ enable_webui_debug_notifications }}'
+            then:
+              - action: persistent_notification.create
+                data:
+                  title: "✅ Smart Alert - Alert Restored After Restart"
+                  message: "Continuing with repeat {{ repeat_count }}"
+          - wait_for_trigger:
+              - trigger: state
+                entity_id: !input persistence_timer
+                to: idle
+            continue_on_timeout: false
+          - variables:
+              repeat_count: '{{ repeat_count + 1 }}'
+          - action: input_text.set_value
+            entity_id: !input persistence_text
+            data:
+              value: '{{ {"fired_at": trigger_fired_at, "count": repeat_count, "entity_id": persist_entity_id} | to_json }}'
+          - action: timer.start
+            entity_id: !input persistence_timer
+            data:
+              duration: !input time_between_repeat_notification
+          - delay: !input time_between_repeat_notification
+
+      # ── CLEAR TRIGGER FIRED ───────────────────────────────────────────────
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ trigger.idx is defined and
+                 trigger.idx | int(-1) >= alert_trigger_count and
+                 trigger.idx | int(-1) < (alert_trigger_count + clear_trigger_count) }}
+        sequence:
+          - if:
+              - condition: template
+                value_template: '{{ enable_webui_debug_notifications }}'
+            then:
+              - action: persistent_notification.create
+                data:
+                  title: "🛑 Smart Alert - Alert Cleared"
+                  message: "Clear trigger fired. Removing notification {{ notification_tag }}"
+          - if:
+              - condition: template
+                value_template: '{{ enable_webui_normal_notifications or test_mode }}'
+            then:
+              - action: persistent_notification.dismiss
+                data:
+                  notification_id: '{{ webui_notification_id }}'
+          - repeat:
+              count: '{{ number_of_notify_services }}'
+              sequence:
+                - action: '{{ notify_services_list[repeat.index-1] }}'
+                  data:
+                    message: clear_notification
+                    data:
+                      tag: '{{ notification_tag }}'
+          - if:
+              - condition: template
+                value_template: '{{ include_persistence == true }}'
+            then:
+              - action: timer.cancel
+                entity_id: !input persistence_timer
+              - action: input_text.set_value
+                entity_id: !input persistence_text
+                data:
+                  value: '{}'
+          - choose: []
+            default: !input custom_action_on_clear
+
+      # ── RESOLUTION TRIGGER FIRED ──────────────────────────────────────────
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ trigger.idx is defined and
+                 trigger.idx | int(-1) >= (alert_trigger_count + clear_trigger_count) and
+                 trigger.idx | int(-1) < (alert_trigger_count + clear_trigger_count + resolution_trigger_count) }}
+        sequence:
+
+          # ── DEBUG: resolution trigger fired ──────────────────────────────────
+          - if:
+              - condition: template
+                value_template: '{{ enable_webui_debug_notifications }}'
+            then:
+              - action: persistent_notification.create
+                data:
+                  title: "✅ Smart Alert - Alert Resolved"
+                  message: >
+                    Resolution trigger fired.
+                    {% if enable_resolution_notification %}
+                    Sending Resolution Notification (overrides Auto-Clear).
+                    {% elif enable_auto_clear %}
+                    Clearing notification {{ notification_tag }}.
+                    {% else %}
+                    Auto-Clear is disabled — notification left as-is.
+                    {% endif %}
+
+          # ── 1. STOP REPEATS: clear persistence helpers ─────────────────────
+          - if:
+              - condition: template
+                value_template: '{{ include_persistence == true }}'
+            then:
+              - action: timer.cancel
+                entity_id: !input persistence_timer
+              - action: input_text.set_value
+                entity_id: !input persistence_text
+                data:
+                  value: '{}'
+
+          # ── 2. CLEAR existing notifications on all devices ──────────────────
+          # Only clears if Auto-Clear is enabled AND Resolution Notification is NOT
+          # enabled — Resolution Notification overrides Auto-Clear and is sent instead.
+          - if:
+              - condition: template
+                value_template: '{{ enable_auto_clear and not enable_resolution_notification }}'
+            then:
+              - if:
+                  - condition: template
+                    value_template: '{{ enable_webui_normal_notifications or test_mode }}'
+                then:
+                  - action: persistent_notification.dismiss
+                    data:
+                      notification_id: '{{ webui_notification_id }}'
+              - repeat:
+                  count: '{{ number_of_notify_services }}'
+                  sequence:
+                    - action: '{{ notify_services_list[repeat.index-1] }}'
+                      data:
+                        message: clear_notification
+                        data:
+                          tag: '{{ notification_tag }}'
+
+          # ── 3. CUSTOM ACTION: on resolution ────────────────────────────────
+          - choose: []
+            default: !input custom_action_on_resolution
+
+          # ── 4. SEND RESOLUTION NOTIFICATION (optional) ─────────────────────
+          - if:
+              - condition: template
+                value_template: '{{ enable_resolution_notification }}'
+            then:
+              - variables:
+                  res_btn_1: '{{ "RES1_" ~ context.id }}'
+                  res_btn_2: '{{ "RES2_" ~ context.id }}'
+                  res_btn_3: '{{ "RES3_" ~ context.id }}'
+                  resolution_actions_list: >
+                    {% set actions = [] %}
+                    {% if 'enable_resolution_button_1' in include_resolution_buttons and resolution_button_1_label != '' %}
+                      {% set actions = actions + [{'action': 'RES1_' ~ context.id, 'title': resolution_button_1_label}] %}
+                    {% endif %}
+                    {% if 'enable_resolution_button_2' in include_resolution_buttons and resolution_button_2_label != '' %}
+                      {% set actions = actions + [{'action': 'RES2_' ~ context.id, 'title': resolution_button_2_label}] %}
+                    {% endif %}
+                    {% if 'enable_resolution_button_3' in include_resolution_buttons and resolution_button_3_label != '' %}
+                      {% set actions = actions + [{'action': 'RES3_' ~ context.id, 'title': resolution_button_3_label}] %}
+                    {% endif %}
+                    {{ actions }}
+                  res_click_url: >
+                    {% if resolution_notification_click_url != '' %}
+                      {{ resolution_notification_click_url }}
+                    {% else %}
+                      {{ notification_click_url }}
+                    {% endif %}
+                  time_since_trigger: >
+                    {% set diff = (as_timestamp(now()) - trigger_fired_at) | int %}
+                    {% if diff < 1 %}
+                      just now
+                    {% else %}
+                      {% set h = diff // 3600 %}
+                      {% set m = (diff % 3600) // 60 %}
+                      {% set s = diff % 60 %}
+                      {% if h > 0 %}{{ h }}h {% endif %}{% if m > 0 %}{{ m }}m {% endif %}{% if h == 0 and s > 0 %}{{ s }}s{% endif %}
+                    {% endif %}
+                  webui_res_title: !input resolution_notification_title
+                  webui_res_message: !input resolution_notification_message
+              - if:
+                  - condition: template
+                    value_template: '{{ enable_webui_debug_notifications }}'
+                then:
+                  - action: persistent_notification.create
+                    data:
+                      title: "📱 Smart Alert - Sending Resolution Notification"
+                      message: |
+                        **Notification Details:**
+                        - Title: {{ webui_res_title }}
+                        - Message: {{ webui_res_message }}
+                        - Tag: {{ notification_tag }}
+                        - Devices: {{ notify_services_list | join(', ') }}
+              - if:
+                  - condition: template
+                    value_template: '{{ enable_webui_normal_notifications or test_mode }}'
+                then:
+                  - action: persistent_notification.create
+                    data:
+                      notification_id: '{{ webui_notification_id }}'
+                      title: '{{ webui_res_title }}'
+                      message: '{{ webui_res_message }}'
+              - parallel:
+                  - repeat:
+                      count: '{{ number_of_notify_services }}'
+                      sequence:
+                        - variables:
+                            res_title: !input resolution_notification_title
+                        - variables:
+                            res_message: !input resolution_notification_message
+                        - if:
+                            - condition: template
+                              value_template: '{{ wake_screen_notification }}'
+                          then:
+                            - action: '{{ notify_services_list[repeat.index-1] }}'
+                              data:
+                                message: command_screen_on
+                        - action: '{{ notify_services_list[repeat.index-1] }}'
+                          data:
+                            message: '{{ res_message }}'
+                            title: '{{ res_title }}'
+                            data:
+                              clickAction: '{{ res_click_url }}'
+                              url: '{{ res_click_url }}'
+                              tag: '{{ notification_tag }}'
+                              image: "{{ snapshot_url if snapshot_url | default('') else None }}"
+                              group: "{{ notification_group if notification_group else None }}"
+                              priority: "{{ 'high' if android_priority == 'high' else None }}"
+                              ttl: "{{ 0 if android_priority == 'high' else None }}"
+                              vibrationPattern: "{{ android_vibration_pattern if android_vibration_pattern else None }}"
+                              ledColor: "{{ android_led_color if android_led_color else None }}"
+                              color: '{{ resolution_notification_color }}'
+                              notification_icon: 'mdi:{{ resolution_notification_icon }}'
+                              push:
+                                interruption-level: !input notification_interruption_level
+                                sound: >
+                                  {% if ios_sound != '' %}{{ ios_sound }}{% else %}default{% endif %}
+                              sound: >
+                                {% if android_sound != '' %}{{ android_sound }}{% else %}default{% endif %}
+                              channel: "{{ 'alarm_stream' if android_alarm_stream else android_channel }}"
+                              persistent: false
+                              sticky: false
+                              actions: '{{ resolution_actions_list }}'
+                  - choose: []
+              - if:
+                  - condition: template
+                    value_template: >
+                      {{ resolution_actions_list | length > 0 and
+                         (resolution_button_timeout.hours | default(0) | int) +
+                         (resolution_button_timeout.minutes | default(0) | int) +
+                         (resolution_button_timeout.seconds | default(0) | int) > 0 }}
+                then:
+                  - wait_for_trigger:
+                      - trigger: event
+                        event_type: mobile_app_notification_action
+                        event_data:
+                          action: '{{ res_btn_1 }}'
+                      - trigger: event
+                        event_type: mobile_app_notification_action
+                        event_data:
+                          action: '{{ res_btn_2 }}'
+                      - trigger: event
+                        event_type: mobile_app_notification_action
+                        event_data:
+                          action: '{{ res_btn_3 }}'
+                    timeout: !input resolution_button_timeout
+                    continue_on_timeout: true
+                  - choose:
+                      - conditions:
+                          - condition: template
+                            value_template: '{{ wait.trigger is not none and wait.trigger.event.data.action == res_btn_1 }}'
+                        sequence:
+                          - sequence: !input resolution_button_1_action
+                      - conditions:
+                          - condition: template
+                            value_template: '{{ wait.trigger is not none and wait.trigger.event.data.action == res_btn_2 }}'
+                        sequence:
+                          - sequence: !input resolution_button_2_action
+                      - conditions:
+                          - condition: template
+                            value_template: '{{ wait.trigger is not none and wait.trigger.event.data.action == res_btn_3 }}'
+                        sequence:
+                          - sequence: !input resolution_button_3_action
+
+    # ── ALERT TRIGGER FIRED ───────────────────────────────────────────────────
+    default:
+
+    # ── OPTIONAL CONDITIONS ───────────────────────────────────────────────────
+    - condition: !input condition_send_notification
+
+    # ── PERSIST STATE ON FRESH TRIGGER (before initial delay) ───────────────
+    - if:
+        - condition: template
+          value_template: '{{ include_persistence == true }}'
+      then:
+        - action: input_text.set_value
+          entity_id: !input persistence_text
+          data:
+            value: '{{ {"fired_at": trigger_fired_at, "count": 0, "entity_id": persist_entity_id} | to_json }}'
+        - if:
+            - condition: template
+              value_template: >
+                {{ (duration_issue_state.hours | default(0) | int) +
+                   (duration_issue_state.minutes | default(0) | int) +
+                   (duration_issue_state.seconds | default(0) | int) > 0 }}
+          then:
+            - action: timer.start
+              entity_id: !input persistence_timer
+              data:
+                duration: !input duration_issue_state
+          else:
+            - action: timer.cancel
+              entity_id: !input persistence_timer
+
+    # ── INITIAL DELAY ─────────────────────────────────────────────────────────
+    - if:
+        - condition: template
+          value_template: >
+            {{ (duration_issue_state.hours | default(0) | int) +
+               (duration_issue_state.minutes | default(0) | int) +
+               (duration_issue_state.seconds | default(0) | int) > 0 }}
+      then:
+        - if:
+            - condition: template
+              value_template: '{{ enable_webui_debug_notifications }}'
+          then:
+            - action: persistent_notification.create
+              data:
+                title: "⏱️ Smart Alert - Initial Delay Active"
+                message: "Waiting {{ duration_issue_state }} before first notification"
+        - delay: !input duration_issue_state
+
+    # ── CUSTOM ACTION: ON FIRST TRIGGER ───────────────────────────────────────
+    - choose: []
+      default: !input custom_action_first_trigger
+
+    # ── BUILD ACTION BUTTONS ──────────────────────────────────────────────────
+    - variables:
+        action_btn_1: '{{ "BTN1_" ~ context.id }}'
+        action_btn_2: '{{ "BTN2_" ~ context.id }}'
+        action_btn_3: '{{ "BTN3_" ~ context.id }}'
+        action_btn_stop: '{{ "STOP_" ~ context.id }}'
+        actions_list: >
+          {% set actions = [] %}
+          {% if 'enable_action_button_1' in include_action_buttons and action_button_1_label != '' %}
+            {% set uri = action_button_1_uri | default('') %}{% set actions = actions + [{'action': 'URI', 'title': action_button_1_label, 'uri': uri} if uri else {'action': 'BTN1_' ~ context.id, 'title': action_button_1_label}] %}
+          {% endif %}
+          {% if 'enable_action_button_2' in include_action_buttons and action_button_2_label != '' %}
+            {% set uri = action_button_2_uri | default('') %}{% set actions = actions + [{'action': 'URI', 'title': action_button_2_label, 'uri': uri} if uri else {'action': 'BTN2_' ~ context.id, 'title': action_button_2_label}] %}
+          {% endif %}
+          {% if 'enable_action_button_3' in include_action_buttons and action_button_3_label != '' %}
+            {% set uri = action_button_3_uri | default('') %}{% set actions = actions + [{'action': 'URI', 'title': action_button_3_label, 'uri': uri} if uri else {'action': 'BTN3_' ~ context.id, 'title': action_button_3_label}] %}
+          {% endif %}
+          {% if include_action_buttons | length > 0 and include_cancel_button and action_button_stop_label != '' %}
+            {% set actions = actions + [{'action': 'STOP_' ~ context.id, 'title': action_button_stop_label}] %}
+          {% endif %}
+          {{ actions }}
+
+    # ── FIRST NOTIFICATION ────────────────────────────────────────────────────
+    - variables:
+        time_since_trigger: >
+          {% set diff = (as_timestamp(now()) - trigger_fired_at) | int %}
+          {% if diff < 1 %}
+            just now
+          {% else %}
+            {% set h = diff // 3600 %}
+            {% set m = (diff % 3600) // 60 %}
+            {% set s = diff % 60 %}
+            {% if h > 0 %}{{ h }}h {% endif %}{% if m > 0 %}{{ m }}m {% endif %}{% if h == 0 and s > 0 %}{{ s }}s{% endif %}
+          {% endif %}
+    - variables:
+        webui_mirror_title: !input notification_title
+        webui_mirror_message: !input notification_message
+    - if:
+        - condition: template
+          value_template: '{{ enable_webui_debug_notifications }}'
+      then:
+        - action: persistent_notification.create
+          data:
+            title: "📱 Smart Alert - Sending First Notification"
+            message: |
+              **Notification Details:**
+              - Title: {{ webui_mirror_title }}
+              - Message: {{ webui_mirror_message }}
+              - Tag: {{ notification_tag }}
+              - Devices: {{ notify_services_list | join(', ') }}
+              - Channel: {{ android_channel }}
+              - Buttons: {{ actions_list | length }}
+    - if:
+        - condition: template
+          value_template: '{{ enable_webui_normal_notifications or test_mode }}'
+      then:
+        - action: persistent_notification.create
+          data:
+            notification_id: '{{ webui_notification_id }}'
+            title: >
+              {{ webui_mirror_title }}{% if show_repeat_count %} ({{ repeat_count + 1 }}){% endif %}
+            message: '{{ webui_mirror_message }}'
+    - parallel:
+        - repeat:
+            count: '{{ number_of_notify_services }}'
+            sequence:
+              - variables:
+                  current_message: !input notification_message
+              - variables:
+                  current_title: !input notification_title
+              - if:
+                  - condition: template
+                    value_template: '{{ wake_screen_notification }}'
+                then:
+                  - action: '{{ notify_services_list[repeat.index-1] }}'
+                    data:
+                      message: command_screen_on
+              - action: '{{ notify_services_list[repeat.index-1] }}'
+                data:
+                  message: '{{ current_message }}'
+                  title: >
+                    {{ current_title }}{% if show_repeat_count %} ({{ repeat_count + 1 }}){% endif %}
+                  data:
+                    clickAction: !input notification_click_url
+                    url: !input notification_click_url
+                    tag: '{{ notification_tag }}'
+                    image: "{{ snapshot_url if snapshot_url | default('') else None }}"
+                    group: "{{ notification_group if notification_group else None }}"
+                    priority: "{{ 'high' if android_priority == 'high' else None }}"
+                    ttl: "{{ 0 if android_priority == 'high' else None }}"
+                    vibrationPattern: "{{ android_vibration_pattern if android_vibration_pattern else None }}"
+                    ledColor: "{{ android_led_color if android_led_color else None }}"
+                    color: !input notification_color
+                    notification_icon: 'mdi:{{ notification_icon_warning }}'
+                    push:
+                      interruption-level: !input notification_interruption_level
+                      sound: >
+                        {% if ios_sound != '' %}{{ ios_sound }}{% else %}default{% endif %}
+                    sound: >
+                      {% if android_sound != '' %}{{ android_sound }}{% else %}default{% endif %}
+                    channel: "{{ 'alarm_stream' if android_alarm_stream else android_channel }}"
+                    persistent: !input notification_persistent
+                    sticky: !input notification_persistent
+                    actions: '{{ actions_list }}'
+        - choose: []
+          default: !input custom_action_issue_state
+
+    # ── WAIT FOR BUTTON PRESS (first notification) ────────────────────────────
+    - variables:
+        last_wait_timed_out: false
+    - if:
+        - condition: template
+          value_template: '{{ actions_list | length > 0 }}'
+      then:
+        - if:
+            - condition: template
+              value_template: '{{ repeat_notification }}'
+          then:
+            - wait_for_trigger:
+                - trigger: event
+                  event_type: mobile_app_notification_action
+                  event_data:
+                    action: '{{ action_btn_1 }}'
+                - trigger: event
+                  event_type: mobile_app_notification_action
+                  event_data:
+                    action: '{{ action_btn_2 }}'
+                - trigger: event
+                  event_type: mobile_app_notification_action
+                  event_data:
+                    action: '{{ action_btn_3 }}'
+                - trigger: event
+                  event_type: mobile_app_notification_action
+                  event_data:
+                    action: '{{ action_btn_stop }}'
+              timeout: !input time_between_repeat_notification
+              continue_on_timeout: true
+          else:
+            - wait_for_trigger:
+                - trigger: event
+                  event_type: mobile_app_notification_action
+                  event_data:
+                    action: '{{ action_btn_1 }}'
+                - trigger: event
+                  event_type: mobile_app_notification_action
+                  event_data:
+                    action: '{{ action_btn_2 }}'
+                - trigger: event
+                  event_type: mobile_app_notification_action
+                  event_data:
+                    action: '{{ action_btn_3 }}'
+                - trigger: event
+                  event_type: mobile_app_notification_action
+                  event_data:
+                    action: '{{ action_btn_stop }}'
+              timeout: !input action_button_timeout
+              continue_on_timeout: true
+
+        # ── BUTTON PRESSED → fire action and stop ─────────────────────────────
+        - choose:
+            - conditions:
+                - condition: template
+                  value_template: '{{ wait.trigger is not none and wait.trigger.event.data.action == action_btn_1 }}'
+              sequence:
+                - if:
+                    - condition: template
+                      value_template: '{{ enable_webui_debug_notifications }}'
+                  then:
+                    - action: persistent_notification.create
+                      data:
+                        title: "👆 Smart Alert - Button 1 Pressed"
+                        message: "{{ action_button_1_label }} - stopping automation"
+                - sequence: !input action_button_1_action
+                - stop: "Button 1 pressed"
+            - conditions:
+                - condition: template
+                  value_template: '{{ wait.trigger is not none and wait.trigger.event.data.action == action_btn_2 }}'
+              sequence:
+                - if:
+                    - condition: template
+                      value_template: '{{ enable_webui_debug_notifications }}'
+                  then:
+                    - action: persistent_notification.create
+                      data:
+                        title: "👆 Smart Alert - Button 2 Pressed"
+                        message: "{{ action_button_2_label }} - stopping automation"
+                - sequence: !input action_button_2_action
+                - stop: "Button 2 pressed"
+            - conditions:
+                - condition: template
+                  value_template: '{{ wait.trigger is not none and wait.trigger.event.data.action == action_btn_3 }}'
+              sequence:
+                - if:
+                    - condition: template
+                      value_template: '{{ enable_webui_debug_notifications }}'
+                  then:
+                    - action: persistent_notification.create
+                      data:
+                        title: "👆 Smart Alert - Button 3 Pressed"
+                        message: "{{ action_button_3_label }} - stopping automation"
+                - sequence: !input action_button_3_action
+                - stop: "Button 3 pressed"
+            - conditions:
+                - condition: template
+                  value_template: '{{ wait.trigger is not none and wait.trigger.event.data.action == action_btn_stop }}'
+              sequence:
+                - if:
+                    - condition: template
+                      value_template: '{{ enable_webui_debug_notifications }}'
+                  then:
+                    - action: persistent_notification.create
+                      data:
+                        title: "❌ Smart Alert - Alert Cancelled"
+                        message: "User pressed {{ action_button_stop_label }}"
+                - if:
+                    - condition: template
+                      value_template: '{{ enable_cancelled_notification }}'
+                  then:
+                    - variables:
+                        cancelled_title: !input cancelled_notification_title
+                        cancelled_message: !input cancelled_notification_message
+                    - if:
+                        - condition: template
+                          value_template: '{{ enable_webui_normal_notifications or test_mode }}'
+                      then:
+                        - action: persistent_notification.create
+                          data:
+                            notification_id: '{{ webui_notification_id }}'
+                            title: '{{ cancelled_title }}'
+                            message: '{{ cancelled_message }}'
+                    - repeat:
+                        count: '{{ number_of_notify_services }}'
+                        sequence:
+                          - if:
+                              - condition: template
+                                value_template: '{{ wake_screen_notification }}'
+                            then:
+                              - action: '{{ notify_services_list[repeat.index-1] }}'
+                                data:
+                                  message: command_screen_on
+                          - action: '{{ notify_services_list[repeat.index-1] }}'
+                            data:
+                              title: '{{ cancelled_title }}'
+                              message: '{{ cancelled_message }}'
+                              data:
+                                tag: '{{ notification_tag }}'
+                                image: "{{ snapshot_url if snapshot_url | default('') else None }}"
+                                group: "{{ notification_group if notification_group else None }}"
+                                priority: "{{ 'high' if android_priority == 'high' else None }}"
+                                ttl: "{{ 0 if android_priority == 'high' else None }}"
+                                vibrationPattern: "{{ android_vibration_pattern if android_vibration_pattern else None }}"
+                                ledColor: "{{ android_led_color if android_led_color else None }}"
+                                persistent: false
+                                sticky: false
+                    - choose: []
+                      default: !input custom_action_cancelled_notification
+                - stop: "Alert cancelled by user"
+
+        # ── TIMEOUT → track it, fall through to repeat loop ──────────────────
+        - variables:
+            last_wait_timed_out: '{{ wait.trigger is none }}'
+        - if:
+            - condition: template
+              value_template: '{{ enable_webui_debug_notifications and last_wait_timed_out }}'
+          then:
+            - action: persistent_notification.create
+              data:
+                title: "⏰ Smart Alert - Button Timeout"
+                message: "No button pressed - continuing to next repeat"
+
+    # ── REPEAT LOOP ───────────────────────────────────────────────────────────
+    - if:
+        - condition: template
+          value_template: '{{ repeat_notification and (max_repeat_count == 0 or repeat_count < max_repeat_count) }}'
+      then:
+        - if:
+            - condition: template
+              value_template: '{{ enable_webui_debug_notifications }}'
+          then:
+            - action: persistent_notification.create
+              data:
+                title: "🔄 Smart Alert - Starting Repeat Loop"
+                message: "Current repeat: {{ repeat_count + 1 }}/{{ max_repeat_count if max_repeat_count > 0 else '∞' }}"
+        - variables:
+            repeat_count: '{{ repeat_count + 1 }}'
+        - if:
+            - condition: template
+              value_template: '{{ include_persistence == true }}'
+          then:
+            - action: timer.start
+              entity_id: !input persistence_timer
+              data:
+                duration: !input time_between_repeat_notification
+            - action: input_text.set_value
+              entity_id: !input persistence_text
+              data:
+                value: '{{ {"fired_at": trigger_fired_at, "count": repeat_count, "entity_id": persist_entity_id} | to_json }}'
+        - if:
+            - condition: template
+              value_template: '{{ actions_list | length == 0 }}'
+          then:
+            - delay: !input time_between_repeat_notification
+        - repeat:
+            while:
+              - condition: template
+                value_template: '{{ repeat_notification and (max_repeat_count == 0 or repeat_count < max_repeat_count) }}'
+            sequence:
+              - variables:
+                  time_since_trigger: >
+                    {% set diff = (as_timestamp(now()) - trigger_fired_at) | int %}
+                    {% if diff < 1 %}
+                      just now
+                    {% else %}
+                      {% set h = diff // 3600 %}
+                      {% set m = (diff % 3600) // 60 %}
+                      {% set s = diff % 60 %}
+                      {% if h > 0 %}{{ h }}h {% endif %}{% if m > 0 %}{{ m }}m {% endif %}{% if h == 0 and s > 0 %}{{ s }}s{% endif %}
+                    {% endif %}
+              - variables:
+                  webui_mirror_title: !input notification_title
+                  webui_mirror_message: !input notification_message
+              - if:
+                  - condition: template
+                    value_template: '{{ enable_webui_normal_notifications or test_mode }}'
+                then:
+                  - action: persistent_notification.create
+                    data:
+                      notification_id: '{{ webui_notification_id }}'
+                      title: >
+                        {{ webui_mirror_title }}{% if show_repeat_count %} ({{ repeat_count + 1 }}){% endif %}
+                      message: '{{ webui_mirror_message }}'
+              - parallel:
+                  - repeat:
+                      count: '{{ number_of_notify_services }}'
+                      sequence:
+                        - variables:
+                            current_message: !input notification_message
+                        - variables:
+                            current_title: !input notification_title
+                        - if:
+                            - condition: template
+                              value_template: '{{ wake_screen_notification }}'
+                          then:
+                            - action: '{{ notify_services_list[repeat.index-1] }}'
+                              data:
+                                message: command_screen_on
+                        - action: '{{ notify_services_list[repeat.index-1] }}'
+                          data:
+                            message: '{{ current_message }}'
+                            title: >
+                              {{ current_title }}{% if show_repeat_count %} ({{ repeat_count + 1 }}){% endif %}
+                            data:
+                              clickAction: !input notification_click_url
+                              url: !input notification_click_url
+                              tag: '{{ notification_tag }}'
+                              image: "{{ snapshot_url if snapshot_url | default('') else None }}"
+                              group: "{{ notification_group if notification_group else None }}"
+                              priority: "{{ 'high' if android_priority == 'high' else None }}"
+                              ttl: "{{ 0 if android_priority == 'high' else None }}"
+                              vibrationPattern: "{{ android_vibration_pattern if android_vibration_pattern else None }}"
+                              ledColor: "{{ android_led_color if android_led_color else None }}"
+                              color: !input notification_color
+                              notification_icon: 'mdi:{{ notification_icon_warning }}'
+                              push:
+                                interruption-level: !input notification_interruption_level
+                                sound: >
+                                  {% if ios_sound != '' %}{{ ios_sound }}{% else %}default{% endif %}
+                              sound: >
+                                {% if android_sound != '' %}{{ android_sound }}{% else %}default{% endif %}
+                              channel: "{{ 'alarm_stream' if android_alarm_stream else android_channel }}"
+                              persistent: !input notification_persistent
+                              sticky: !input notification_persistent
+                              actions: '{{ actions_list }}'
+                  - choose: []
+                    default: !input custom_action_issue_state
+
+              # ── WAIT FOR BUTTON PRESS ON REPEAT ───────────────────────────
+              - if:
+                  - condition: template
+                    value_template: '{{ actions_list | length > 0 }}'
+                then:
+                  - wait_for_trigger:
+                      - trigger: event
+                        event_type: mobile_app_notification_action
+                        event_data:
+                          action: '{{ action_btn_1 }}'
+                      - trigger: event
+                        event_type: mobile_app_notification_action
+                        event_data:
+                          action: '{{ action_btn_2 }}'
+                      - trigger: event
+                        event_type: mobile_app_notification_action
+                        event_data:
+                          action: '{{ action_btn_3 }}'
+                      - trigger: event
+                        event_type: mobile_app_notification_action
+                        event_data:
+                          action: '{{ action_btn_stop }}'
+                    timeout: !input time_between_repeat_notification
+                    continue_on_timeout: true
+
+                  # ── BUTTON PRESSED → fire action and stop repeats ──────────
+                  - choose:
+                      - conditions:
+                          - condition: template
+                            value_template: '{{ wait.trigger is not none and wait.trigger.event.data.action == action_btn_1 }}'
+                        sequence:
+                          - if:
+                              - condition: template
+                                value_template: '{{ enable_webui_debug_notifications }}'
+                            then:
+                              - action: persistent_notification.create
+                                data:
+                                  title: "👆 Button 1 Pressed"
+                                  message: "{{ action_button_1_label }} - stopping automation"
+                          - sequence: !input action_button_1_action
+                          - stop: "Button 1 pressed"
+                      - conditions:
+                          - condition: template
+                            value_template: '{{ wait.trigger is not none and wait.trigger.event.data.action == action_btn_2 }}'
+                        sequence:
+                          - if:
+                              - condition: template
+                                value_template: '{{ enable_webui_debug_notifications }}'
+                            then:
+                              - action: persistent_notification.create
+                                data:
+                                  title: "👆 Button 2 Pressed"
+                                  message: "{{ action_button_2_label }} - stopping automation"
+                          - sequence: !input action_button_2_action
+                          - stop: "Button 2 pressed"
+                      - conditions:
+                          - condition: template
+                            value_template: '{{ wait.trigger is not none and wait.trigger.event.data.action == action_btn_3 }}'
+                        sequence:
+                          - if:
+                              - condition: template
+                                value_template: '{{ enable_webui_debug_notifications }}'
+                            then:
+                              - action: persistent_notification.create
+                                data:
+                                  title: "👆 Button 3 Pressed"
+                                  message: "{{ action_button_3_label }} - stopping automation"
+                          - sequence: !input action_button_3_action
+                          - stop: "Button 3 pressed"
+                      - conditions:
+                          - condition: template
+                            value_template: '{{ wait.trigger is not none and wait.trigger.event.data.action == action_btn_stop }}'
+                        sequence:
+                          - if:
+                              - condition: template
+                                value_template: '{{ enable_webui_debug_notifications }}'
+                            then:
+                              - action: persistent_notification.create
+                                data:
+                                  title: "❌ Alert Cancelled (Repeat)"
+                                  message: "User pressed {{ action_button_stop_label }}"
+                          - if:
+                              - condition: template
+                                value_template: '{{ enable_cancelled_notification }}'
+                            then:
+                              - variables:
+                                  cancelled_title: !input cancelled_notification_title
+                                  cancelled_message: !input cancelled_notification_message
+                              - if:
+                                  - condition: template
+                                    value_template: '{{ enable_webui_normal_notifications or test_mode }}'
+                                then:
+                                  - action: persistent_notification.create
+                                    data:
+                                      notification_id: '{{ webui_notification_id }}'
+                                      title: '{{ cancelled_title }}'
+                                      message: '{{ cancelled_message }}'
+                              - repeat:
+                                  count: '{{ number_of_notify_services }}'
+                                  sequence:
+                                    - if:
+                                        - condition: template
+                                          value_template: '{{ wake_screen_notification }}'
+                                      then:
+                                        - action: '{{ notify_services_list[repeat.index-1] }}'
+                                          data:
+                                            message: command_screen_on
+                                    - action: '{{ notify_services_list[repeat.index-1] }}'
+                                      data:
+                                        title: '{{ cancelled_title }}'
+                                        message: '{{ cancelled_message }}'
+                                        data:
+                                          tag: '{{ notification_tag }}'
+                                          image: "{{ snapshot_url if snapshot_url | default('') else None }}"
+                                          group: "{{ notification_group if notification_group else None }}"
+                                          priority: "{{ 'high' if android_priority == 'high' else None }}"
+                                          ttl: "{{ 0 if android_priority == 'high' else None }}"
+                                          vibrationPattern: "{{ android_vibration_pattern if android_vibration_pattern else None }}"
+                                          ledColor: "{{ android_led_color if android_led_color else None }}"
+                                          persistent: false
+                                          sticky: false
+                              - choose: []
+                                default: !input custom_action_cancelled_notification
+                          - stop: "Alert cancelled by user"
+
+                  # ── TIMEOUT → track it, continue loop ─────────────────────
+                  - variables:
+                      last_wait_timed_out: '{{ wait.trigger is none }}'
+
+              - variables:
+                  repeat_count: '{{ repeat_count + 1 }}'
+              - if:
+                  - condition: template
+                    value_template: '{{ include_persistence == true }}'
+                then:
+                  - action: timer.start
+                    entity_id: !input persistence_timer
+                    data:
+                      duration: !input time_between_repeat_notification
+                  - action: input_text.set_value
+                    entity_id: !input persistence_text
+                    data:
+                      value: '{{ {"fired_at": trigger_fired_at, "count": repeat_count, "entity_id": persist_entity_id} | to_json }}'
+              - if:
+                  - condition: template
+                    value_template: '{{ actions_list | length == 0 }}'
+                then:
+                  - delay: !input time_between_repeat_notification
+
+    # ── AUTO-ACTIONS (failsafe — fires only if all repeats exhausted unanswered)
+    - if:
+        - condition: template
+          value_template: '{{ actions_list | length > 0 and last_wait_timed_out }}'
+      then:
+        - if:
+            - condition: template
+              value_template: '{{ enable_webui_debug_notifications }}'
+          then:
+            - action: persistent_notification.create
+              data:
+                title: "🤖 Smart Alert - Auto-Actions Triggered"
+                message: "All repeats exhausted with no response. Running failsafe actions."
+        - if:
+            - condition: template
+              value_template: '{{ "enable_auto_action_1" in include_auto_actions }}'
+          then: !input action_button_1_action
+        - if:
+            - condition: template
+              value_template: '{{ "enable_auto_action_2" in include_auto_actions }}'
+          then: !input action_button_2_action
+        - if:
+            - condition: template
+              value_template: '{{ "enable_auto_action_3" in include_auto_actions }}'
+          then: !input action_button_3_action
+
+    # ── FINAL NOTIFICATION ───────────────────────────────────────────────────
+    - if:
+        - condition: template
+          value_template: '{{ repeat_notification and enable_final_notification and last_wait_timed_out }}'
+      then:
+        - variables:
+            time_since_trigger: >
+              {% set diff = (as_timestamp(now()) - trigger_fired_at) | int %}
+              {% if diff < 1 %}
+                just now
+              {% else %}
+                {% set h = diff // 3600 %}
+                {% set m = (diff % 3600) // 60 %}
+                {% set s = diff % 60 %}
+                {% if h > 0 %}{{ h }}h {% endif %}{% if m > 0 %}{{ m }}m {% endif %}{% if h == 0 and s > 0 %}{{ s }}s{% endif %}
+              {% endif %}
+        - variables:
+            webui_mirror_final_title: !input final_notification_title
+            webui_mirror_final_message: !input final_notification_message
+        - if:
+            - condition: template
+              value_template: '{{ enable_webui_debug_notifications }}'
+          then:
+            - action: persistent_notification.create
+              data:
+                title: "📱 Smart Alert - Sending Final Notification"
+                message: "All repeats complete. Final notification sent."
+        - if:
+            - condition: template
+              value_template: '{{ enable_webui_normal_notifications or test_mode }}'
+          then:
+            - action: persistent_notification.create
+              data:
+                notification_id: '{{ webui_notification_id }}'
+                title: '{{ webui_mirror_final_title }}'
+                message: '{{ webui_mirror_final_message }}'
+        - parallel:
+            - repeat:
+                count: '{{ number_of_notify_services }}'
+                sequence:
+                  - variables:
+                      final_title: !input final_notification_title
+                  - variables:
+                      final_message: !input final_notification_message
+                  - if:
+                      - condition: template
+                        value_template: '{{ wake_screen_notification }}'
+                    then:
+                      - action: '{{ notify_services_list[repeat.index-1] }}'
+                        data:
+                          message: command_screen_on
+                  - action: '{{ notify_services_list[repeat.index-1] }}'
+                    data:
+                      message: '{{ final_message }}'
+                      title: '{{ final_title }}'
+                      data:
+                        clickAction: !input notification_click_url
+                        url: !input notification_click_url
+                        tag: '{{ notification_tag }}'
+                        image: "{{ snapshot_url if snapshot_url | default('') else None }}"
+                        group: "{{ notification_group if notification_group else None }}"
+                        priority: "{{ 'high' if android_priority == 'high' else None }}"
+                        ttl: "{{ 0 if android_priority == 'high' else None }}"
+                        vibrationPattern: "{{ android_vibration_pattern if android_vibration_pattern else None }}"
+                        ledColor: "{{ android_led_color if android_led_color else None }}"
+                        color: !input notification_color
+                        notification_icon: 'mdi:{{ notification_icon_warning }}'
+                        push:
+                          interruption-level: !input notification_interruption_level
+                          sound: >
+                            {% if ios_sound != '' %}{{ ios_sound }}{% else %}default{% endif %}
+                        sound: >
+                          {% if android_sound != '' %}{{ android_sound }}{% else %}default{% endif %}
+                        channel: "{{ 'alarm_stream' if android_alarm_stream else android_channel }}"
+                        persistent: !input notification_persistent
+                        sticky: !input notification_persistent
+            - choose: []
+              default: !input custom_action_final_notification
+        - wait_for_trigger:
+            - trigger: event
+              event_type: mobile_app_notification_action
+              event_data:
+                action: '{{ action_btn_1 }}'
+            - trigger: event
+              event_type: mobile_app_notification_action
+              event_data:
+                action: '{{ action_btn_2 }}'
+            - trigger: event
+              event_type: mobile_app_notification_action
+              event_data:
+                action: '{{ action_btn_3 }}'
+            - trigger: event
+              event_type: mobile_app_notification_action
+              event_data:
+                action: '{{ action_btn_stop }}'
+          timeout: !input action_button_timeout
+          continue_on_timeout: true
+        - choose:
+            - conditions:
+                - condition: template
+                  value_template: '{{ wait.trigger is not none and wait.trigger.event.data.action == action_btn_1 }}'
+              sequence:
+                - sequence: !input action_button_1_action
+            - conditions:
+                - condition: template
+                  value_template: '{{ wait.trigger is not none and wait.trigger.event.data.action == action_btn_2 }}'
+              sequence:
+                - sequence: !input action_button_2_action
+            - conditions:
+                - condition: template
+                  value_template: '{{ wait.trigger is not none and wait.trigger.event.data.action == action_btn_3 }}'
+              sequence:
+                - sequence: !input action_button_3_action
+            - conditions:
+                - condition: template
+                  value_template: '{{ wait.trigger is not none and wait.trigger.event.data.action == action_btn_stop }}'
+              sequence:
+                - if:
+                    - condition: template
+                      value_template: '{{ enable_cancelled_notification }}'
+                  then:
+                    - variables:
+                        cancelled_title: !input cancelled_notification_title
+                        cancelled_message: !input cancelled_notification_message
+                    - if:
+                        - condition: template
+                          value_template: '{{ enable_webui_normal_notifications or test_mode }}'
+                      then:
+                        - action: persistent_notification.create
+                          data:
+                            notification_id: '{{ webui_notification_id }}'
+                            title: '{{ cancelled_title }}'
+                            message: '{{ cancelled_message }}'
+                    - repeat:
+                        count: '{{ number_of_notify_services }}'
+                        sequence:
+                          - if:
+                              - condition: template
+                                value_template: '{{ wake_screen_notification }}'
+                            then:
+                              - action: '{{ notify_services_list[repeat.index-1] }}'
+                                data:
+                                  message: command_screen_on
+                          - action: '{{ notify_services_list[repeat.index-1] }}'
+                            data:
+                              title: '{{ cancelled_title }}'
+                              message: '{{ cancelled_message }}'
+                              data:
+                                tag: '{{ notification_tag }}'
+                                image: "{{ snapshot_url if snapshot_url | default('') else None }}"
+                                group: "{{ notification_group if notification_group else None }}"
+                                priority: "{{ 'high' if android_priority == 'high' else None }}"
+                                ttl: "{{ 0 if android_priority == 'high' else None }}"
+                                vibrationPattern: "{{ android_vibration_pattern if android_vibration_pattern else None }}"
+                                ledColor: "{{ android_led_color if android_led_color else None }}"
+                                persistent: false
+                                sticky: false
+                    - choose: []
+                      default: !input custom_action_cancelled_notification
+                - stop: "Alert cancelled by user"
+    - if:
+        - condition: template
+          value_template: >
+            {{ enable_auto_clear and
+               notification_tag != '' and
+               (auto_clear_delay.hours | default(0) | int) +
+               (auto_clear_delay.minutes | default(0) | int) +
+               (auto_clear_delay.seconds | default(0) | int) > 0 }}
+      then:
+        - if:
+            - condition: template
+              value_template: '{{ enable_webui_debug_notifications }}'
+          then:
+            - action: persistent_notification.create
+              data:
+                title: "⏱️ Smart Alert - Auto-Clear Delay"
+                message: "Waiting {{ auto_clear_delay }} before clearing notification"
+        - delay: !input auto_clear_delay
+        - if:
+            - condition: template
+              value_template: '{{ enable_webui_normal_notifications or test_mode }}'
+          then:
+            - action: persistent_notification.dismiss
+              data:
+                notification_id: '{{ webui_notification_id }}'
+        - repeat:
+            count: '{{ number_of_notify_services }}'
+            sequence:
+              - action: '{{ notify_services_list[repeat.index-1] }}'
+                data:
+                  message: clear_notification
+                  data:
+                    tag: '{{ notification_tag }}'
+        - if:
+            - condition: template
+              value_template: '{{ include_persistence == true }}'
+          then:
+            - action: timer.cancel
+              entity_id: !input persistence_timer
+            - action: input_text.set_value
+              entity_id: !input persistence_text
+              data:
+                value: '{}'
+        - if:
+            - condition: template
+              value_template: '{{ enable_webui_debug_notifications }}'
+          then:
+            - action: persistent_notification.create
+              data:
+                title: "✅ Smart Alert - Alert Complete"
+                message: "Notification {{ notification_tag }} cleared on all devices"
+        - choose: []
+          default: !input custom_action_on_clear
