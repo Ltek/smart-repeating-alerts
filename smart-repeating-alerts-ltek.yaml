@@ -4,7 +4,7 @@ blueprint:
 
     **Repeating, actionable alerts for doors, windows, leaks, cameras and more**
 
-    🚀 Version 2026.11.06.43
+    🚀 Version 2026.11.13.44
 
     Smart Repeating Alerts is Repeating Alert Notifications (2026.07.30.39) plus camera snapshots, more delivery options and a
     test mode. Every Repeating Alerts input keeps its name, so an existing Repeating Alerts automation switches by
@@ -1244,22 +1244,24 @@ actions:
             - Max Repeats: {{ max_repeat_count }}
             - Repeat Interval: {{ time_between_repeat_notification }}
 
+  - variables:
+      is_manual_run: "{{ (trigger.platform is none and trigger.idx is not defined) }}"
   - condition: template
     value_template: >
-      {{ trigger.id == "ha_restart" or
+      {{ trigger.id == "ha_restart" or is_manual_run or
          (trigger.idx is defined and
           trigger.idx | int(-1) < (alert_trigger_count + clear_trigger_count + resolution_trigger_count)) }}
 
   # ── Smart Repeating Alerts: cooldown, then the camera snapshot ─────────────────────────
   - variables:
-      is_alert_trigger: "{{ trigger.idx is defined and trigger.idx | int(-1) < alert_trigger_count }}"
+      is_alert_trigger: "{{ is_manual_run or (trigger.idx is defined and trigger.idx | int(-1) < alert_trigger_count) }}"
       snapshot_create_file_path: !input snapshot_file_path
       archive_create_file_path: !input archive_file_path
       snapshot_url: >
         {% if camera %}{{ snapshot_create_file_path | replace('/config/www', '/local') | replace('/media', '/media/local', 1) }}{% endif %}
   - condition: template
     value_template: >
-      {{ not is_alert_trigger or cooldown_time | int(0) <= 0 or not this.attributes.last_triggered or
+      {{ is_manual_run or not is_alert_trigger or cooldown_time | int(0) <= 0 or not this.attributes.last_triggered or
          (now() - this.attributes.last_triggered).total_seconds() > cooldown_time | int(0) }}
   - if:
       - condition: template

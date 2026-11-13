@@ -258,17 +258,27 @@ TRIGGER_CHECK = """  - condition: template
          (trigger.idx is defined and
           trigger.idx | int(-1) < (alert_trigger_count + clear_trigger_count + resolution_trigger_count)) }}
 """
-SNAP = TRIGGER_CHECK + """
+# A manual Run (Run actions / automation.trigger) has no trigger (trigger.platform is none): it counts as an alert, so
+# the snapshot is taken and the notification sent, and it skips the cooldown.
+MANUAL = "(trigger.platform is none and trigger.idx is not defined)"
+SNAP = """  - variables:
+      is_manual_run: "{{ %s }}"
+  - condition: template
+    value_template: >
+      {{ trigger.id == "ha_restart" or is_manual_run or
+         (trigger.idx is defined and
+          trigger.idx | int(-1) < (alert_trigger_count + clear_trigger_count + resolution_trigger_count)) }}
+""" % MANUAL + """
   # ── Smart Repeating Alerts: cooldown, then the camera snapshot ─────────────────────────
   - variables:
-      is_alert_trigger: "{{ trigger.idx is defined and trigger.idx | int(-1) < alert_trigger_count }}"
+      is_alert_trigger: "{{ is_manual_run or (trigger.idx is defined and trigger.idx | int(-1) < alert_trigger_count) }}"
       snapshot_create_file_path: !input snapshot_file_path
       archive_create_file_path: !input archive_file_path
       snapshot_url: >
         {% if camera %}{{ snapshot_create_file_path | replace('/config/www', '/local') | replace('/media', '/media/local', 1) }}{% endif %}
   - condition: template
     value_template: >
-      {{ not is_alert_trigger or cooldown_time | int(0) <= 0 or not this.attributes.last_triggered or
+      {{ is_manual_run or not is_alert_trigger or cooldown_time | int(0) <= 0 or not this.attributes.last_triggered or
          (now() - this.attributes.last_triggered).total_seconds() > cooldown_time | int(0) }}
   - if:
       - condition: template
